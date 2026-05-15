@@ -92,10 +92,11 @@ func validateSitePaths(cfg *config.Config, publicDir string) (*SiteValidateResul
 	}
 
 	canonical := cfg.URLPolicy.Canonical
-	for lang, expectedPath := range canonical {
-		fullPath := filepath.Join(publicDir, expectedPath)
+	for lang, routePath := range canonical {
+		htmlPath := normalizeRouteToIndex(routePath)
+		fullPath := filepath.Join(publicDir, htmlPath)
 		if _, err := os.Stat(fullPath); err != nil {
-			result.Violations = append(result.Violations, fmt.Sprintf("expected canonical path for %s not found: %s", lang, expectedPath))
+			result.Violations = append(result.Violations, fmt.Sprintf("expected canonical file for %s not found: %s", lang, htmlPath))
 		}
 	}
 
@@ -118,6 +119,15 @@ func validateSitePaths(cfg *config.Config, publicDir string) (*SiteValidateResul
 
 	result.Passed = len(result.Violations) == 0
 	return result, nil
+}
+
+func normalizeRouteToIndex(route string) string {
+	route = strings.TrimPrefix(route, "/")
+	route = strings.TrimSuffix(route, "/")
+	if route == "" {
+		return "index.html"
+	}
+	return filepath.Join(route, "index.html")
 }
 
 func ValidateSiteConfig(cfg *config.Config) []string {

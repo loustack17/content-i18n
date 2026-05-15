@@ -133,7 +133,7 @@ func TestValidateSite_CanonicalPathMissing(t *testing.T) {
 
 	cfg := &config.Config{
 		URLPolicy: config.URLPolicyConfig{
-			Canonical:          map[string]string{"en": "index.html"},
+			Canonical:          map[string]string{"en": "/"},
 			RuntimeTranslation: config.RuntimeTranslationConfig{},
 		},
 	}
@@ -143,7 +143,7 @@ func TestValidateSite_CanonicalPathMissing(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if result.Passed {
-		t.Fatal("expected validation to fail when canonical path missing")
+		t.Fatal("expected validation to fail when canonical index.html missing")
 	}
 	if len(result.Violations) != 1 {
 		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
@@ -158,7 +158,7 @@ func TestValidateSite_CanonicalPathPresent(t *testing.T) {
 
 	cfg := &config.Config{
 		URLPolicy: config.URLPolicyConfig{
-			Canonical:          map[string]string{"en": "index.html"},
+			Canonical:          map[string]string{"en": "/"},
 			RuntimeTranslation: config.RuntimeTranslationConfig{},
 		},
 	}
@@ -183,7 +183,7 @@ func TestValidateSite_UnexpectedCanonicalPath(t *testing.T) {
 			TargetLanguages: []string{"en"},
 		},
 		URLPolicy: config.URLPolicyConfig{
-			Canonical:          map[string]string{"zh-TW": "zh-tw/index.html"},
+			Canonical:          map[string]string{"zh-TW": "/zh-tw/"},
 			RuntimeTranslation: config.RuntimeTranslationConfig{},
 		},
 	}
