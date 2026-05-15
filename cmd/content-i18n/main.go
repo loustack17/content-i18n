@@ -210,8 +210,34 @@ func runValidateContent(args []string) {
 }
 
 func runValidateSite(configPath string) {
-	err := core.ValidateSite(configPath)
+	cfg, err := loadConfig(configPath)
 	exitOnError(err)
+
+	if cfg.Adapter.Name != "hugo" {
+		fmt.Fprintf(os.Stderr, "error: validate-site only supports hugo adapter (got: %s)\n", cfg.Adapter.Name)
+		os.Exit(2)
+	}
+
+	hugoRoot := cfg.ConfigDir
+
+	warnings := core.ValidateSiteConfig(cfg)
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+	}
+
+	result, err := core.ValidateSite(cfg, hugoRoot)
+	exitOnError(err)
+
+	fmt.Printf("validate-site: hugo output: %s\n", result.HugoOutput)
+	if result.Passed {
+		fmt.Println("PASS")
+	} else {
+		fmt.Println("FAIL")
+		for _, v := range result.Violations {
+			fmt.Printf("  %s\n", v)
+		}
+		os.Exit(1)
+	}
 }
 
 func exitOnError(err error) {

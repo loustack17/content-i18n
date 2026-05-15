@@ -12,10 +12,10 @@ import (
 )
 
 type Violation struct {
-	Field         string
-	Section       string
-	Message       string
-	SuggestedFix  string
+	Field        string
+	Section      string
+	Message      string
+	SuggestedFix string
 }
 
 type ValidateOptions struct {
