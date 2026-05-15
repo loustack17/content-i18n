@@ -43,6 +43,30 @@ func TestCompileGlossary(t *testing.T) {
 	}
 }
 
+func TestCompileGlossaryWithComma(t *testing.T) {
+	entries := []GlossaryEntry{
+		{Source: "foo,bar", Target: "service, account"},
+	}
+
+	result := CompileGlossary(entries)
+	expected := `"foo,bar","service, account"`
+	if result != expected {
+		t.Fatalf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestCompileGlossaryWithQuote(t *testing.T) {
+	entries := []GlossaryEntry{
+		{Source: `foo"bar`, Target: `he said "hi"`},
+	}
+
+	result := CompileGlossary(entries)
+	expected := `"foo""bar","he said ""hi"""`
+	if result != expected {
+		t.Fatalf("expected %q, got %q", expected, result)
+	}
+}
+
 func TestCompileGlossaryEmpty(t *testing.T) {
 	result := CompileGlossary([]GlossaryEntry{})
 	if result != "" {

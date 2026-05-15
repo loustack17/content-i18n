@@ -2,6 +2,7 @@ package deepl
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -158,11 +159,13 @@ func (p *Provider) TranslateBatch(texts []string, sourceLang string, targetLang 
 }
 
 func CompileGlossary(entries []GlossaryEntry) string {
-	var lines []string
+	var b bytes.Buffer
+	w := csv.NewWriter(&b)
 	for _, e := range entries {
-		lines = append(lines, fmt.Sprintf("%s,%s", e.Source, e.Target))
+		_ = w.Write([]string{e.Source, e.Target})
 	}
-	return strings.Join(lines, "\n")
+	w.Flush()
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 func deeplLangCode(lang string) string {
