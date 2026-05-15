@@ -3,10 +3,10 @@ package validator
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 	"unicode"
 
+	"github.com/loustack17/content-i18n/internal/content"
 	"github.com/loustack17/content-i18n/internal/frontmatter"
 	"gopkg.in/yaml.v3"
 )
@@ -126,8 +126,8 @@ func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Vi
 		}
 	}
 
-	sourceURLs := urlPattern.FindAllString(sourceContent, -1)
-	targetURLs := urlPattern.FindAllString(targetContent, -1)
+	sourceURLs := content.URLPattern.FindAllString(sourceContent, -1)
+	targetURLs := content.URLPattern.FindAllString(targetContent, -1)
 	sourceURLSet := make(map[string]bool)
 	for _, u := range sourceURLs {
 		sourceURLSet[u] = true
@@ -270,5 +270,3 @@ func isTitleCapitalized(title string) bool {
 	}
 	return true
 }
-
-var urlPattern = regexp.MustCompile(`https?://[^\s\)\]"<>]+`)

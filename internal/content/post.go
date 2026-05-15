@@ -7,10 +7,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/loustack17/content-i18n/internal/config"
 )
+
+var URLPattern = regexp.MustCompile(`https?://[^\s\)\]"<>]+`)
 
 type Post struct {
 	Path        string

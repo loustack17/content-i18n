@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/loustack17/content-i18n/internal/content"
 )
 
 type TokenMap struct {
@@ -75,10 +77,8 @@ func (tm *TokenMap) replaceInlineCode(text string) string {
 	})
 }
 
-var urlPattern = regexp.MustCompile(`https?://[^\s\)\]"<>]+`)
-
 func (tm *TokenMap) replaceURLs(text string) string {
-	return urlPattern.ReplaceAllStringFunc(text, func(match string) string {
+	return content.URLPattern.ReplaceAllStringFunc(text, func(match string) string {
 		trailing := strings.TrimRight(match, ".,;:!?")
 		suffix := match[len(trailing):]
 		placeholder := tm.add("URL", trailing)
