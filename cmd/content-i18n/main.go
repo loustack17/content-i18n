@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/loustack17/content-i18n/internal/config"
-	"github.com/loustack17/content-i18n/internal/content"
 	"github.com/loustack17/content-i18n/internal/core"
 )
 
@@ -86,13 +85,12 @@ func runStatus(configPath string) {
 		os.Exit(1)
 	}
 
-	files, err := content.Discover(cfg)
+	report, err := core.Status(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 
-	report := content.BuildStatusReport(cfg, files)
 	fmt.Printf("project_type: %s\n", report.ProjectType)
 	fmt.Printf("source_language: %s\n", report.SourceLanguage)
 	fmt.Printf("source_path: %s\n", report.SourcePath)
@@ -112,7 +110,7 @@ func runList(configPath string) {
 		os.Exit(1)
 	}
 
-	files, err := content.Discover(cfg)
+	files, err := core.List(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -134,7 +132,7 @@ func runPlan(args []string) {
 	cfg, err := loadConfig(*configPath)
 	exitOnError(err)
 
-	var plans []content.FileInfo
+	var plans []core.FileInfo
 	if (*file != "") != (*to != "") {
 		fmt.Fprintln(os.Stderr, "error: --file and --to must be used together")
 		os.Exit(2)
@@ -176,6 +174,7 @@ func runApplyWork(args []string) {
 
 func runValidateContent(args []string) {
 	flags := flag.NewFlagSet("validate-content", flag.ExitOnError)
+	configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
 	file := flags.String("file", "", "target file to validate")
 	source := flags.String("source", "", "source file for comparison")
 	glossary := flags.String("glossary", "", "glossary file path")
@@ -186,9 +185,13 @@ func runValidateContent(args []string) {
 		os.Exit(2)
 	}
 
+	cfg, err := loadConfig(*configPath)
+	exitOnError(err)
+
 	opts := &core.ValidateOptions{
 		SourcePath:   *source,
 		GlossaryPath: *glossary,
+		Config:       cfg,
 	}
 
 	result, err := core.ValidateContent(*file, opts)

@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/loustack17/content-i18n/internal/frontmatter"
+	"gopkg.in/yaml.v3"
 )
 
 type Violation struct {
@@ -132,10 +133,29 @@ type GlossaryTerm struct {
 	Target string
 }
 
+type GlossaryFile struct {
+	Terms []struct {
+		Source string `yaml:"source"`
+		Target string `yaml:"target"`
+	} `yaml:"terms"`
+}
+
 func loadGlossaryTerms(path string) ([]GlossaryTerm, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
+	}
+
+	if strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml") {
+		var gf GlossaryFile
+		if err := yaml.Unmarshal(data, &gf); err != nil {
+			return nil, fmt.Errorf("parse glossary YAML: %w", err)
+		}
+		terms := make([]GlossaryTerm, 0, len(gf.Terms))
+		for _, t := range gf.Terms {
+			terms = append(terms, GlossaryTerm{Source: t.Source, Target: t.Target})
+		}
+		return terms, nil
 	}
 
 	var terms []GlossaryTerm

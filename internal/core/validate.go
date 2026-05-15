@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/loustack17/content-i18n/internal/config"
 	"github.com/loustack17/content-i18n/internal/validator"
 )
 
 type ValidateOptions struct {
 	SourcePath   string
 	GlossaryPath string
+	Config       *config.Config
 }
 
 type ValidateResult struct {
