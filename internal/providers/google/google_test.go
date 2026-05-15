@@ -72,3 +72,61 @@ func TestTranslateBatchEmpty(t *testing.T) {
 		t.Fatalf("expected empty result, got %v", result)
 	}
 }
+
+func TestCompileGlossary(t *testing.T) {
+	entries := []GlossaryEntry{
+		{Source: "服務帳號", Target: "service account"},
+		{Source: "雲端", Target: "cloud"},
+	}
+
+	result := CompileGlossary(entries)
+	expected := "服務帳號\tservice account\n雲端\tcloud"
+	if result != expected {
+		t.Fatalf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestCompileGlossaryWithComma(t *testing.T) {
+	entries := []GlossaryEntry{
+		{Source: "foo,bar", Target: "service, account"},
+	}
+
+	result := CompileGlossary(entries)
+	expected := "foo,bar\tservice, account"
+	if result != expected {
+		t.Fatalf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestCompileGlossaryEmpty(t *testing.T) {
+	result := CompileGlossary([]GlossaryEntry{})
+	if result != "" {
+		t.Fatalf("expected empty string, got %q", result)
+	}
+}
+
+func TestDefaultMetadata(t *testing.T) {
+	meta := DefaultMetadata("zh-TW", "en", "test-glossary")
+
+	if meta.Provider != "google" {
+		t.Fatalf("expected provider=google, got %s", meta.Provider)
+	}
+	if meta.Quality != "machine_draft" {
+		t.Fatalf("expected quality=machine_draft, got %s", meta.Quality)
+	}
+	if meta.Reviewed != false {
+		t.Fatalf("expected reviewed=false, got %v", meta.Reviewed)
+	}
+	if meta.Draft != true {
+		t.Fatalf("expected draft=true, got %v", meta.Draft)
+	}
+	if meta.SourceLang != "zh-TW" {
+		t.Fatalf("expected source_lang=zh-TW, got %s", meta.SourceLang)
+	}
+	if meta.TargetLang != "en" {
+		t.Fatalf("expected target_lang=en, got %s", meta.TargetLang)
+	}
+	if meta.GlossaryID != "test-glossary" {
+		t.Fatalf("expected glossary_id=test-glossary, got %s", meta.GlossaryID)
+	}
+}

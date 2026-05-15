@@ -1,7 +1,9 @@
 package google
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"fmt"
 	"os"
 	"strings"
@@ -19,6 +21,16 @@ type Provider struct {
 type GlossaryEntry struct {
 	Source string `yaml:"source"`
 	Target string `yaml:"target"`
+}
+
+type TranslationMetadata struct {
+	Provider   string
+	Quality    string
+	Reviewed   bool
+	Draft      bool
+	SourceLang string
+	TargetLang string
+	GlossaryID string
 }
 
 func New() (*Provider, error) {
@@ -62,14 +74,41 @@ func (p *Provider) Close() error {
 }
 
 func (p *Provider) Translate(text string, sourceLang string, targetLang string) (string, error) {
-	results, err := p.TranslateBatch([]string{text}, sourceLang, targetLang)
-	if err != nil {
-		return "", err
+	return p.TranslateWithMetadata(text, sourceLang, targetLang, "")
+}
+
+func (p *Provider) TranslateWithMetadata(text string, sourceLang string, targetLang string, glossaryID string) (string, error) {
+	ctx := context.Background()
+	parent := fmt.Sprintf("projects/%s/locations/%s", p.project, p.location)
+
+	req := &translatepb.TranslateTextRequest{
+		Parent:             parent,
+		TargetLanguageCode: googleLangCode(targetLang),
+		MimeType:           "text/plain",
+		Contents:           []string{text},
 	}
-	if len(results) == 0 {
+
+	if sourceLang != "" {
+		req.SourceLanguageCode = googleLangCode(sourceLang)
+	}
+
+	if glossaryID != "" {
+		req.GlossaryConfig = &translatepb.TranslateTextGlossaryConfig{
+			Glossary: fmt.Sprintf("%s/glossaries/%s", parent, glossaryID),
+		}
+	}
+
+	resp, err := p.client.TranslateText(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("translate: %w", err)
+	}
+
+	translations := resp.GetTranslations()
+	if len(translations) == 0 {
 		return "", fmt.Errorf("no translation returned")
 	}
-	return results[0], nil
+
+	return translations[0].GetTranslatedText(), nil
 }
 
 func (p *Provider) TranslateBatch(texts []string, sourceLang string, targetLang string) ([]string, error) {
@@ -105,35 +144,65 @@ func (p *Provider) TranslateBatch(texts []string, sourceLang string, targetLang 
 }
 
 func (p *Provider) CreateGlossary(ctx context.Context, glossaryID string, sourceLang string, targetLang string, entries []GlossaryEntry) error {
-	return fmt.Errorf("glossary creation requires GCS upload; use TranslateWithGlossary with existing glossary")
+	if len(entries) == 0 {
+		return fmt.Errorf("glossary entries required")
+	}
+
+	parent := fmt.Sprintf("projects/%s/locations/%s", p.project, p.location)
+	glossaryName := fmt.Sprintf("%s/glossaries/%s", parent, glossaryID)
+
+	glossary := &translatepb.Glossary{
+		Name: glossaryName,
+		Languages: &translatepb.Glossary_LanguagePair{
+			LanguagePair: &translatepb.Glossary_LanguageCodePair{
+				SourceLanguageCode: googleLangCode(sourceLang),
+				TargetLanguageCode: googleLangCode(targetLang),
+			},
+		},
+		InputConfig: &translatepb.GlossaryInputConfig{
+			Source: &translatepb.GlossaryInputConfig_GcsSource{
+				GcsSource: &translatepb.GcsSource{
+					InputUri: fmt.Sprintf("gs://%s/glossaries/%s.tsv", p.project, glossaryID),
+				},
+			},
+		},
+	}
+
+	req := &translatepb.CreateGlossaryRequest{
+		Parent:   parent,
+		Glossary: glossary,
+	}
+
+	op, err := p.client.CreateGlossary(ctx, req)
+	if err != nil {
+		return fmt.Errorf("create glossary: %w", err)
+	}
+
+	_, err = op.Wait(ctx)
+	return err
 }
 
-func (p *Provider) TranslateWithGlossary(ctx context.Context, text string, sourceLang string, targetLang string, glossaryID string) (string, error) {
-	parent := fmt.Sprintf("projects/%s/locations/%s", p.project, p.location)
-	glossaryConfig := &translatepb.TranslateTextGlossaryConfig{
-		Glossary: fmt.Sprintf("%s/glossaries/%s", parent, glossaryID),
+func CompileGlossary(entries []GlossaryEntry) string {
+	var b bytes.Buffer
+	w := csv.NewWriter(&b)
+	w.Comma = '\t'
+	for _, e := range entries {
+		_ = w.Write([]string{e.Source, e.Target})
 	}
+	w.Flush()
+	return strings.TrimSuffix(b.String(), "\n")
+}
 
-	req := &translatepb.TranslateTextRequest{
-		Parent:             parent,
-		TargetLanguageCode: googleLangCode(targetLang),
-		SourceLanguageCode: googleLangCode(sourceLang),
-		MimeType:           "text/plain",
-		Contents:           []string{text},
-		GlossaryConfig:     glossaryConfig,
+func DefaultMetadata(sourceLang string, targetLang string, glossaryID string) TranslationMetadata {
+	return TranslationMetadata{
+		Provider:   "google",
+		Quality:    "machine_draft",
+		Reviewed:   false,
+		Draft:      true,
+		SourceLang: sourceLang,
+		TargetLang: targetLang,
+		GlossaryID: glossaryID,
 	}
-
-	resp, err := p.client.TranslateText(ctx, req)
-	if err != nil {
-		return "", fmt.Errorf("translate with glossary: %w", err)
-	}
-
-	translations := resp.GetTranslations()
-	if len(translations) == 0 {
-		return "", fmt.Errorf("no translation returned")
-	}
-
-	return translations[0].GetTranslatedText(), nil
 }
 
 func googleLangCode(lang string) string {
