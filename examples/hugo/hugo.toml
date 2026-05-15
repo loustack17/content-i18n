@@ -1,0 +1,8 @@
+baseURL = "https://example.org/"
+title = "Test Site"
+
+[languages]
+[languages.en]
+weight = 1
+[languages.zh_tw]
+weight = 2
