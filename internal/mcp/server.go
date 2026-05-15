@@ -372,7 +372,10 @@ func (s *Server) handlePostResource(ctx context.Context, req mcp.ReadResourceReq
 
 	fullPath := filepath.Join(targetDir, path)
 	cleanPath := filepath.Clean(fullPath)
-	if !strings.HasPrefix(cleanPath, filepath.Clean(targetDir)) {
+	cleanTargetDir := filepath.Clean(targetDir)
+
+	rel, err := filepath.Rel(cleanTargetDir, cleanPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("path traversal detected: %s", path)
 	}
 
