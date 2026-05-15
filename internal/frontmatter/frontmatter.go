@@ -1,10 +1,22 @@
 package frontmatter
 
-import "strings"
+import (
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+type Metadata struct {
+	Title          string `yaml:"title"`
+	TranslationKey string `yaml:"translationKey"`
+	Draft          bool   `yaml:"draft"`
+	Reviewed       bool   `yaml:"reviewed"`
+}
 
 type Document struct {
 	Frontmatter string
 	Body        string
+	Metadata    Metadata
 }
 
 func Split(markdown string) Document {
@@ -18,5 +30,12 @@ func Split(markdown string) Document {
 		return Document{Body: markdown}
 	}
 
-	return Document{Frontmatter: parts[0], Body: parts[1]}
+	fm := parts[0]
+	var meta Metadata
+	_ = yaml.Unmarshal([]byte(fm), &meta)
+	return Document{
+		Frontmatter: fm,
+		Body:        parts[1],
+		Metadata:    meta,
+	}
 }

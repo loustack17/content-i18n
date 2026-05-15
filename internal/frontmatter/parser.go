@@ -67,7 +67,8 @@ func ExtractCodeBlocks(body string) []string {
 		}
 		if inBlock {
 			block = append(block, line)
-			if strings.TrimSpace(line) == fence || strings.HasPrefix(strings.TrimSpace(line), "```") && len(strings.TrimSpace(line)) == 3 {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == fence || (strings.HasPrefix(trimmed, "```") && len(trimmed) == 3) {
 				blocks = append(blocks, strings.Join(block, "\n"))
 				inBlock = false
 				block = nil

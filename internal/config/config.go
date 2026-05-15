@@ -15,6 +15,7 @@ type Config struct {
 	URLPolicy   URLPolicyConfig   `yaml:"url_policy" json:"url_policy"`
 	Translation TranslationConfig `yaml:"translation" json:"translation"`
 	Style       StyleConfig       `yaml:"style" json:"style"`
+	ConfigDir   string
 }
 
 type ProjectConfig struct {
@@ -78,11 +79,33 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 
+	cfgDir := filepath.Dir(path)
+	if err := resolvePaths(&cfg, cfgDir); err != nil {
+		return nil, err
+	}
+	cfg.ConfigDir = cfgDir
+
 	if err := validate(&cfg); err != nil {
 		return nil, err
 	}
 
 	return &cfg, nil
+}
+
+func (c *Config) StatusFilePath() string {
+	return filepath.Join(c.ConfigDir, ".content-i18n", "status.json")
+}
+
+func resolvePaths(cfg *Config, cfgDir string) error {
+	if !filepath.IsAbs(cfg.Paths.Source) {
+		cfg.Paths.Source = filepath.Join(cfgDir, cfg.Paths.Source)
+	}
+	for lang, target := range cfg.Paths.Targets {
+		if !filepath.IsAbs(target) {
+			cfg.Paths.Targets[lang] = filepath.Join(cfgDir, target)
+		}
+	}
+	return nil
 }
 
 func validate(cfg *Config) error {
