@@ -20,6 +20,7 @@ type Violation struct {
 
 type ValidateOptions struct {
 	GlossaryPath string
+	BannedWords  []string
 }
 
 func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Violation, error) {
@@ -57,7 +58,27 @@ func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Vi
 		violations = append(violations, Violation{Field: "language", Section: "body", Message: fmt.Sprintf("CJK ratio %.1f%% exceeds 5%% threshold", cjkRatio*100), SuggestedFix: "translate CJK content or wrap in code/quote"})
 	}
 
+	if targetDoc.Metadata.SourceLang == "" {
+		violations = append(violations, Violation{Field: "language", Section: "header", Message: "source language metadata missing", SuggestedFix: "add source_lang to frontmatter"})
+	}
+
+	if targetDoc.Metadata.TargetLang == "" {
+		violations = append(violations, Violation{Field: "language", Section: "header", Message: "target language metadata missing", SuggestedFix: "add target_lang to frontmatter"})
+	}
+
+	if !isTitleCapitalized(targetDoc.Metadata.Title) {
+		violations = append(violations, Violation{Field: "title", Section: "header", Message: "title does not use natural English capitalization", SuggestedFix: "use title case for English titles"})
+	}
+
 	if sourcePath == "" {
+		if opts != nil && len(opts.BannedWords) > 0 {
+			for _, banned := range opts.BannedWords {
+				if strings.Contains(strings.ToLower(targetContent), strings.ToLower(banned)) {
+					violations = append(violations, Violation{Field: "style", Section: "body", Message: fmt.Sprintf("banned wording %q found in target", banned), SuggestedFix: "replace with approved terminology"})
+				}
+			}
+		}
+
 		return violations, nil
 	}
 
@@ -121,6 +142,14 @@ func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Vi
 				if strings.Contains(sourceContent, term.Source) && !strings.Contains(targetContent, term.Target) {
 					violations = append(violations, Violation{Field: "glossary", Section: "body", Message: fmt.Sprintf("glossary term %q -> %q not found in target", term.Source, term.Target), SuggestedFix: "add glossary term to translation"})
 				}
+			}
+		}
+	}
+
+	if opts != nil && len(opts.BannedWords) > 0 {
+		for _, banned := range opts.BannedWords {
+			if strings.Contains(strings.ToLower(targetContent), strings.ToLower(banned)) {
+				violations = append(violations, Violation{Field: "style", Section: "body", Message: fmt.Sprintf("banned wording %q found in target", banned), SuggestedFix: "replace with approved terminology"})
 			}
 		}
 	}
@@ -210,6 +239,32 @@ func isCJK(r rune) bool {
 		r >= 0x2F800 && r <= 0x2FA1F ||
 		r >= 0x3040 && r <= 0x30FF ||
 		r >= 0xAC00 && r <= 0xD7AF
+}
+
+func isTitleCapitalized(title string) bool {
+	if title == "" {
+		return true
+	}
+	words := strings.Fields(title)
+	for i, word := range words {
+		if len(word) == 0 {
+			continue
+		}
+		runes := []rune(word)
+		if i == 0 {
+			if !unicode.IsUpper(runes[0]) {
+				return false
+			}
+		} else {
+			if len(word) <= 3 {
+				continue
+			}
+			if !unicode.IsUpper(runes[0]) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 var urlPattern = regexp.MustCompile(`https?://[^\s\)\]"<>]+`)

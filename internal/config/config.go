@@ -64,8 +64,9 @@ type OutputConfig struct {
 }
 
 type StyleConfig struct {
-	Pack     string `yaml:"pack" json:"pack"`
-	Glossary string `yaml:"glossary" json:"glossary"`
+	Pack        string   `yaml:"pack" json:"pack"`
+	Glossary    string   `yaml:"glossary" json:"glossary"`
+	BannedWords []string `yaml:"banned_words" json:"banned_words"`
 }
 
 func Load(path string) (*Config, error) {

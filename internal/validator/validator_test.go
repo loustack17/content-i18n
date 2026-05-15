@@ -178,8 +178,8 @@ func TestValidate_CJKRatioExceeded(t *testing.T) {
 }
 
 func TestValidate_ValidTranslation(t *testing.T) {
-	source := writeTemp(t, "source.md", "---\ntitle: 原始標題\ntranslationKey: test\n---\nuse `code` here\n```go\nfunc main() {}\n```\n")
-	target := writeTemp(t, "target.md", "---\ntitle: Translated Title\ntranslationKey: test\ndraft: true\nreviewed: false\n---\nuse `code` here\n```go\nfunc main() {}\n```\n")
+	source := writeTemp(t, "source.md", "---\ntitle: 原始標題\ntranslationKey: test\nsource_lang: zh-TW\n---\nuse `code` here\n```go\nfunc main() {}\n```\n")
+	target := writeTemp(t, "target.md", "---\ntitle: Translated Title\ntranslationKey: test\ndraft: true\nreviewed: false\nsource_lang: zh-TW\ntarget_lang: en\n---\nuse `code` here\n```go\nfunc main() {}\n```\n")
 	v, err := Validate(target, source, nil)
 	if err != nil {
 		t.Fatal(err)

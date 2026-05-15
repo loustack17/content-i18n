@@ -25,8 +25,17 @@ func ValidateContent(targetFile string, opts *ValidateOptions) (*ValidateResult,
 		return nil, fmt.Errorf("resolve path: %w", err)
 	}
 
+	glossaryPath := opts.GlossaryPath
+	if glossaryPath == "" && opts.Config != nil && opts.Config.Style.Glossary != "" {
+		glossaryPath = opts.Config.Style.Glossary
+		if !filepath.IsAbs(glossaryPath) {
+			glossaryPath = filepath.Join(opts.Config.ConfigDir, glossaryPath)
+		}
+	}
+
 	vOpts := &validator.ValidateOptions{
-		GlossaryPath: opts.GlossaryPath,
+		GlossaryPath: glossaryPath,
+		BannedWords:  opts.Config.Style.BannedWords,
 	}
 
 	violations, err := validator.Validate(abs, opts.SourcePath, vOpts)

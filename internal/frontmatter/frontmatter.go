@@ -11,6 +11,8 @@ type Metadata struct {
 	TranslationKey string `yaml:"translationKey"`
 	Draft          bool   `yaml:"draft"`
 	Reviewed       bool   `yaml:"reviewed"`
+	SourceLang     string `yaml:"source_lang"`
+	TargetLang     string `yaml:"target_lang"`
 }
 
 type Document struct {
