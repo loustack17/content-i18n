@@ -9,6 +9,7 @@ import (
 
 	"github.com/loustack17/content-i18n/internal/config"
 	"github.com/loustack17/content-i18n/internal/core"
+	"github.com/loustack17/content-i18n/internal/mcp"
 )
 
 func main() {
@@ -40,7 +41,7 @@ func main() {
 		flags := flag.NewFlagSet(command, flag.ExitOnError)
 		configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
 		flags.Parse(args)
-		fmt.Printf("content-i18n mcp not yet implemented\nconfig: %s\n", *configPath)
+		runMCP(*configPath)
 	case "help":
 		printUsage()
 	default:
@@ -236,6 +237,17 @@ func runValidateSite(configPath string) {
 		for _, v := range result.Violations {
 			fmt.Printf("  %s\n", v)
 		}
+		os.Exit(1)
+	}
+}
+
+func runMCP(configPath string) {
+	cfg, err := loadConfig(configPath)
+	exitOnError(err)
+
+	srv := mcp.NewServer(cfg)
+	if err := srv.ServeStdio(); err != nil {
+		fmt.Fprintf(os.Stderr, "mcp server error: %v\n", err)
 		os.Exit(1)
 	}
 }
