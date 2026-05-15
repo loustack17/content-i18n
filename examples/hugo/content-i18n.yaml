@@ -18,7 +18,7 @@ adapter:
 url_policy:
   canonical:
     en: /
-    zh-TW: /zh-tw/
+    zh-TW: /zh_tw/
 
 translation:
   default_provider: ai-harness

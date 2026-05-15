@@ -1,5 +1,7 @@
 /content-i18n
 /docs/superpowers/
 /work/
+examples/hugo/public/
+examples/hugo/.hugo_build.lock
 
 AGENTS.local.md
