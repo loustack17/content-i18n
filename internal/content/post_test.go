@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loustack/content-i18n/internal/config"
+	"github.com/loustack17/content-i18n/internal/config"
 )
 
 func TestDiscover(t *testing.T) {

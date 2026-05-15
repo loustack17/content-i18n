@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/loustack/content-i18n/internal/config"
-	"github.com/loustack/content-i18n/internal/content"
+	"github.com/loustack17/content-i18n/internal/config"
+	"github.com/loustack17/content-i18n/internal/content"
 )
 
 func main() {
