@@ -36,3 +36,18 @@ translation:
 style:
   pack: .content-i18n/style/na-devops-platform.yaml
   glossary: .content-i18n/glossary.yaml
+  tone:
+    abstract_opener_threshold: 3
+    abstract_terms:
+      - identity
+      - solution
+      - approach
+      - mechanism
+      - paradigm
+      - methodology
+    heading_doc_like_prefixes:
+      - overview of
+      - introduction to
+      - prerequisites for
+      - what is
+      - definition of

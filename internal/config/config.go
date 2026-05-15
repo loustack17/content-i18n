@@ -64,9 +64,16 @@ type OutputConfig struct {
 }
 
 type StyleConfig struct {
-	Pack        string   `yaml:"pack" json:"pack"`
-	Glossary    string   `yaml:"glossary" json:"glossary"`
-	BannedWords []string `yaml:"banned_words" json:"banned_words"`
+	Pack        string     `yaml:"pack" json:"pack"`
+	Glossary    string     `yaml:"glossary" json:"glossary"`
+	BannedWords []string   `yaml:"banned_words" json:"banned_words"`
+	Tone        ToneConfig `yaml:"tone" json:"tone"`
+}
+
+type ToneConfig struct {
+	AbstractOpenerThreshold int      `yaml:"abstract_opener_threshold" json:"abstract_opener_threshold"`
+	AbstractTerms           []string `yaml:"abstract_terms" json:"abstract_terms"`
+	HeadingDocLikePrefixes  []string `yaml:"heading_doc_like_prefixes" json:"heading_doc_like_prefixes"`
 }
 
 func Load(path string) (*Config, error) {
@@ -138,6 +145,16 @@ func validate(cfg *Config) error {
 		if _, err := os.Stat(dir); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("paths.targets[%s] error: %w", lang, err)
 		}
+	}
+
+	if cfg.Style.Tone.AbstractOpenerThreshold == 0 {
+		cfg.Style.Tone.AbstractOpenerThreshold = 3
+	}
+	if len(cfg.Style.Tone.AbstractTerms) == 0 {
+		cfg.Style.Tone.AbstractTerms = []string{"identity", "solution", "approach", "mechanism", "paradigm", "methodology"}
+	}
+	if len(cfg.Style.Tone.HeadingDocLikePrefixes) == 0 {
+		cfg.Style.Tone.HeadingDocLikePrefixes = []string{"overview of", "introduction to", "prerequisites for", "what is", "definition of"}
 	}
 
 	return nil

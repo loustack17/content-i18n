@@ -28,3 +28,14 @@ translation:
 style:
   pack: .content-i18n/style/technical-english.yaml
   glossary: .content-i18n/glossary.yaml
+  tone:
+    abstract_opener_threshold: 3
+    abstract_terms:
+      - identity
+      - solution
+      - approach
+      - mechanism
+    heading_doc_like_prefixes:
+      - overview of
+      - introduction to
+      - what is

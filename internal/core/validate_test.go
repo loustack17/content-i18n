@@ -233,3 +233,92 @@ func TestValidateSite_RuntimeTranslationEnabledWithoutRoute(t *testing.T) {
 		t.Fatal("expected validation to fail when runtime translation enabled without route")
 	}
 }
+
+func TestValidateContent_ToneChecksWired(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	targetPath := filepath.Join(tmpDir, "bad-tone.md")
+	targetContent := `---
+title: Bad Tone Test
+draft: true
+source_lang: zh-TW
+target_lang: en
+---
+## Overview of the system
+
+The system is designed to handle requests.
+The user is expected to follow guidelines.
+The approach is based on identity management.
+The mechanism is critical for identity verification.
+Identity is important for identity providers.
+`
+	if err := os.WriteFile(targetPath, []byte(targetContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{
+		Style: config.StyleConfig{
+			Tone: config.ToneConfig{
+				AbstractOpenerThreshold: 3,
+				AbstractTerms:           []string{"identity"},
+				HeadingDocLikePrefixes:  []string{"overview"},
+			},
+		},
+	}
+
+	result, err := ValidateContent(targetPath, &ValidateOptions{Config: cfg})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Passed {
+		t.Fatalf("expected tone validation to fail, but got PASS. Violations: %v", result.Violations)
+	}
+
+	foundTone := false
+	for _, v := range result.Violations {
+		if v.Field == "tone" {
+			foundTone = true
+			break
+		}
+	}
+	if !foundTone {
+		t.Fatalf("expected tone violations, got: %v", result.Violations)
+	}
+}
+
+func TestValidateContent_ToneChecksClean(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	targetPath := filepath.Join(tmpDir, "clean-tone.md")
+	targetContent := `---
+title: Clean Tone Test
+draft: true
+source_lang: zh-TW
+target_lang: en
+---
+## How we reduced latency by 40%%
+
+We replaced the connection pool with a shared channel. The benchmark shows a 40%% improvement.
+`
+	if err := os.WriteFile(targetPath, []byte(targetContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{
+		Style: config.StyleConfig{
+			Tone: config.ToneConfig{
+				AbstractOpenerThreshold: 3,
+				AbstractTerms:           []string{"identity"},
+				HeadingDocLikePrefixes:  []string{"overview"},
+			},
+		},
+	}
+
+	result, err := ValidateContent(targetPath, &ValidateOptions{Config: cfg})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Passed {
+		t.Fatalf("expected clean content to pass, got violations: %v", result.Violations)
+	}
+}

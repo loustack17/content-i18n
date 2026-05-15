@@ -43,13 +43,20 @@ func ValidateContent(targetFile string, opts *ValidateOptions) (*ValidateResult,
 	}
 
 	var bannedWords []string
+	var toneChecks validator.ToneCheckOptions
 	if opts.Config != nil {
 		bannedWords = opts.Config.Style.BannedWords
+		toneChecks = validator.ToneCheckOptions{
+			AbstractOpenerThreshold: opts.Config.Style.Tone.AbstractOpenerThreshold,
+			AbstractTerms:           opts.Config.Style.Tone.AbstractTerms,
+			HeadingDocLikePrefixes:  opts.Config.Style.Tone.HeadingDocLikePrefixes,
+		}
 	}
 
 	vOpts := &validator.ValidateOptions{
 		GlossaryPath: glossaryPath,
 		BannedWords:  bannedWords,
+		ToneChecks:   toneChecks,
 	}
 
 	violations, err := validator.Validate(abs, opts.SourcePath, vOpts)
