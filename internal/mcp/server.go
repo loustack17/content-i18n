@@ -167,13 +167,14 @@ func (s *Server) handleCreateWorkPacket(ctx context.Context, req mcp.CallToolReq
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
+	slug := core.SlugFromPath(source, s.cfg.Paths.Source)
 	packet, err := core.GenerateWorkPacket(s.cfg, source, lang)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	out, _ := json.MarshalIndent(map[string]string{
-		"slug":     core.SlugFromPath(source, s.cfg.Paths.Source),
+		"slug":     slug,
 		"dir":      packet.Dir,
 		"source":   packet.SourcePath,
 		"target":   packet.TargetPath,
@@ -295,46 +296,28 @@ func (s *Server) handleConfigResource(ctx context.Context, req mcp.ReadResourceR
 }
 
 func (s *Server) handleGlossaryResource(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	if s.cfg.Style.Glossary == "" {
-		return nil, fmt.Errorf("no glossary configured")
-	}
-
-	path := s.cfg.Style.Glossary
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(s.cfg.ConfigDir, path)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	return []mcp.ResourceContents{
-		mcp.TextResourceContents{
-			URI:      "content-i18n://glossary",
-			MIMEType: "application/yaml",
-			Text:     string(data),
-		},
-	}, nil
+	return s.handleFileResource("content-i18n://glossary", "application/yaml", s.cfg.Style.Glossary, "glossary")
 }
 
 func (s *Server) handleStylePackResource(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	if s.cfg.Style.Pack == "" {
-		return nil, fmt.Errorf("no style pack configured")
-	}
+	return s.handleFileResource("content-i18n://style-pack", "application/yaml", s.cfg.Style.Pack, "style pack")
+}
 
-	path := s.cfg.Style.Pack
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(s.cfg.ConfigDir, path)
+func (s *Server) handleFileResource(uri, mime, cfgPath, label string) ([]mcp.ResourceContents, error) {
+	if cfgPath == "" {
+		return nil, fmt.Errorf("no %s configured", label)
 	}
-
-	data, err := os.ReadFile(path)
+	if !filepath.IsAbs(cfgPath) {
+		cfgPath = filepath.Join(s.cfg.ConfigDir, cfgPath)
+	}
+	data, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return nil, err
 	}
 	return []mcp.ResourceContents{
 		mcp.TextResourceContents{
-			URI:      "content-i18n://style-pack",
-			MIMEType: "application/yaml",
+			URI:      uri,
+			MIMEType: mime,
 			Text:     string(data),
 		},
 	}, nil
@@ -357,12 +340,11 @@ func (s *Server) handlePostResource(ctx context.Context, req mcp.ReadResourceReq
 		return nil, fmt.Errorf("invalid post URI: %s", uri)
 	}
 
-	var targetDir string
+	targetDir := s.cfg.Paths.Targets[lang]
 	if lang == s.cfg.Project.SourceLanguage {
 		targetDir = s.cfg.Paths.Source
-	} else if dir, ok := s.cfg.Paths.Targets[lang]; ok {
-		targetDir = dir
-	} else {
+	}
+	if targetDir == "" {
 		return nil, fmt.Errorf("unknown language: %s", lang)
 	}
 
