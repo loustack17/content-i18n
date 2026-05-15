@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/loustack/content-i18n/schemas/content-i18n.schema.json",
+  "title": "content-i18n Configuration",
+  "description": "Generic configuration schema for the content-i18n translation harness.",
+  "type": "object",
+  "required": ["project", "paths", "translation"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "required": ["type", "source_language", "target_languages"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Project type. Examples: hugo, generic-markdown, docusaurus, mkdocs.",
+          "examples": ["hugo", "generic-markdown"]
+        },
+        "source_language": {
+          "type": "string",
+          "description": "Source language code.",
+          "examples": ["zh-TW", "en", "ja"]
+        },
+        "target_languages": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "List of target language codes.",
+          "examples": [["en"], ["en", "ja"]]
+        }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "required": ["source", "targets"],
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Path to source content directory, relative to config file."
+        },
+        "targets": {
+          "type": "object",
+          "description": "Map of language code to target content directory.",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "adapter": {
+      "type": "object",
+      "description": "Content adapter settings.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Adapter name. Must match a built-in or registered adapter.",
+          "examples": ["hugo", "generic-markdown"]
+        },
+        "mode": {
+          "type": "string",
+          "description": "Adapter mode. Examples: content_directory, page_bundle, flat.",
+          "examples": ["content_directory", "page_bundle", "flat"]
+        },
+        "preserve_relative_paths": {
+          "type": "boolean",
+          "default": true,
+          "description": "Keep relative directory structure when writing targets."
+        },
+        "translation_key": {
+          "type": "string",
+          "description": "Frontmatter key used to link translated pages."
+        }
+      }
+    },
+    "url_policy": {
+      "type": "object",
+      "description": "URL policy metadata for validation only. Not used for routing.",
+      "properties": {
+        "canonical": {
+          "type": "object",
+          "description": "Map of language code to canonical URL path.",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "translation": {
+      "type": "object",
+      "required": ["default_provider"],
+      "properties": {
+        "default_provider": {
+          "type": "string",
+          "description": "Primary translation provider.",
+          "examples": ["ai-harness", "deepl", "google"]
+        },
+        "fallback_providers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Ordered list of fallback providers."
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "draft": {
+              "type": "boolean",
+              "default": true,
+              "description": "Mark translated output as draft."
+            },
+            "reviewed": {
+              "type": "boolean",
+              "default": false,
+              "description": "Mark translated output as reviewed."
+            },
+            "preserve_code_blocks": {
+              "type": "boolean",
+              "default": true
+            },
+            "preserve_inline_code": {
+              "type": "boolean",
+              "default": true
+            },
+            "preserve_frontmatter_keys": {
+              "type": "boolean",
+              "default": true
+            },
+            "preserve_links": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        }
+      }
+    },
+    "style": {
+      "type": "object",
+      "description": "Style pack and glossary paths.",
+      "properties": {
+        "pack": {
+          "type": "string",
+          "description": "Path to style pack YAML file."
+        },
+        "glossary": {
+          "type": "string",
+          "description": "Path to glossary YAML file."
+        }
+      }
+    }
+  }
+}

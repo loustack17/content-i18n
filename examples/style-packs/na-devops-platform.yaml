@@ -1,0 +1,30 @@
+name: na-devops-platform
+voice:
+  audience: "North American DevOps, Platform, SRE, and backend engineering readers"
+  tone: "clear, practical, technically precise"
+  rewrite_level: "translate and lightly adapt, not literal machine translation"
+prefer_terms:
+  - deployment
+  - rollout
+  - rollback
+  - production
+  - staging
+  - reliability
+  - incident
+  - troubleshooting
+  - observability
+  - least privilege
+  - service account
+  - workload identity federation
+  - CI/CD pipeline
+avoid:
+  - unexplained acronyms
+  - literal source-language sentence order
+  - resume-sounding exaggeration
+  - tutorial filler
+rules:
+  titles: "Translate titles into natural technical English."
+  headings: "Keep heading hierarchy. Improve clarity when the source heading is too terse."
+  code: "Do not translate code, commands, config keys, package names, API names, resource names, or error strings."
+  links: "Preserve URLs. Translate link text only when natural."
+  frontmatter: "Translate title, description, summary, keywords when present. Preserve date, slug, aliases, tags unless configured."

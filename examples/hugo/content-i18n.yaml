@@ -1,0 +1,38 @@
+project:
+  type: hugo
+  source_language: zh-TW
+  target_languages:
+    - en
+
+paths:
+  source: content/zh-TW
+  targets:
+    en: content/en
+
+adapter:
+  name: hugo
+  mode: content_directory
+  preserve_relative_paths: true
+  translation_key: contentbasename
+
+url_policy:
+  canonical:
+    en: /
+    zh-TW: /zh-tw/
+
+translation:
+  default_provider: ai-harness
+  fallback_providers:
+    - deepl
+    - google
+  output:
+    draft: true
+    reviewed: false
+    preserve_code_blocks: true
+    preserve_inline_code: true
+    preserve_frontmatter_keys: true
+    preserve_links: true
+
+style:
+  pack: .content-i18n/style/na-devops-platform.yaml
+  glossary: .content-i18n/glossary.yaml

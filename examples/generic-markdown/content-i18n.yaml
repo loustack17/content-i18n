@@ -1,0 +1,30 @@
+project:
+  type: generic-markdown
+  source_language: zh-TW
+  target_languages:
+    - en
+
+paths:
+  source: docs/zh-TW
+  targets:
+    en: docs/en
+
+adapter:
+  name: generic-markdown
+  preserve_relative_paths: true
+
+translation:
+  default_provider: ai-harness
+  fallback_providers:
+    - deepl
+    - google
+  output:
+    draft: true
+    reviewed: false
+    preserve_code_blocks: true
+    preserve_inline_code: true
+    preserve_links: true
+
+style:
+  pack: .content-i18n/style/technical-english.yaml
+  glossary: .content-i18n/glossary.yaml

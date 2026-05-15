@@ -1,0 +1,26 @@
+terms:
+  - source: "部署"
+    target: "deployment"
+    source_lang: zh-TW
+    target_lang: en
+    note: "Use deployment as noun. Use deploy only as verb."
+  - source: "維運"
+    target: "operations"
+    source_lang: zh-TW
+    target_lang: en
+  - source: "可靠性"
+    target: "reliability"
+    source_lang: zh-TW
+    target_lang: en
+  - source: "可觀測性"
+    target: "observability"
+    source_lang: zh-TW
+    target_lang: en
+  - source: "服務帳號"
+    target: "service account"
+    source_lang: zh-TW
+    target_lang: en
+  - source: "最小權限"
+    target: "least privilege"
+    source_lang: zh-TW
+    target_lang: en
