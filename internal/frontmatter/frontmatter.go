@@ -22,6 +22,7 @@ type Document struct {
 	Frontmatter string
 	Body        string
 	Metadata    Metadata
+	RawMeta     map[string]any
 }
 
 func Split(markdown string) Document {
@@ -38,10 +39,13 @@ func Split(markdown string) Document {
 	fm := parts[0]
 	var meta Metadata
 	_ = yaml.Unmarshal([]byte(fm), &meta)
+	var raw map[string]any
+	_ = yaml.Unmarshal([]byte(fm), &raw)
 	return Document{
 		Frontmatter: fm,
 		Body:        parts[1],
 		Metadata:    meta,
+		RawMeta:     raw,
 	}
 }
 
@@ -53,16 +57,18 @@ type ProviderMeta struct {
 }
 
 func InjectProviderMeta(doc Document, pm ProviderMeta) string {
-	meta := doc.Metadata
-	meta.TranslationProvider = pm.Provider
-	meta.TranslationQuality = pm.Quality
-	meta.Reviewed = pm.Reviewed
-	meta.Draft = pm.Draft
+	if doc.RawMeta == nil {
+		doc.RawMeta = make(map[string]any)
+	}
+	doc.RawMeta["translation_provider"] = pm.Provider
+	doc.RawMeta["translation_quality"] = pm.Quality
+	doc.RawMeta["reviewed"] = pm.Reviewed
+	doc.RawMeta["draft"] = pm.Draft
 
 	var b bytes.Buffer
 	enc := yaml.NewEncoder(&b)
 	enc.SetIndent(2)
-	_ = enc.Encode(meta)
+	_ = enc.Encode(doc.RawMeta)
 	enc.Close()
 
 	return "---\n" + strings.TrimSpace(b.String()) + "\n---\n" + doc.Body

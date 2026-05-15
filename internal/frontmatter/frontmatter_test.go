@@ -71,3 +71,41 @@ func TestInjectProviderMetaPreservesBody(t *testing.T) {
 		t.Fatalf("expected body preserved, got: %s", result)
 	}
 }
+
+func TestInjectProviderMetaPreservesUnknownFields(t *testing.T) {
+	input := `---
+title: Test
+date: 2026-05-15
+slug: my-post
+tags:
+  - gcp
+draft: true
+---
+# Hello`
+	doc := Split(input)
+
+	pm := ProviderMeta{
+		Provider: "google",
+		Quality:  "machine_draft",
+		Reviewed: false,
+		Draft:    true,
+	}
+
+	result := InjectProviderMeta(doc, pm)
+
+	if !strings.Contains(result, "date:") {
+		t.Fatalf("expected 'date:' preserved, got: %s", result)
+	}
+	if !strings.Contains(result, "slug:") {
+		t.Fatalf("expected 'slug:' preserved, got: %s", result)
+	}
+	if !strings.Contains(result, "tags:") {
+		t.Fatalf("expected 'tags:' preserved, got: %s", result)
+	}
+	if !strings.Contains(result, "gcp") {
+		t.Fatalf("expected 'gcp' tag preserved, got: %s", result)
+	}
+	if !strings.Contains(result, "translation_provider:") {
+		t.Fatalf("expected translation_provider added, got: %s", result)
+	}
+}
