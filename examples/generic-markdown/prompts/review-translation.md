@@ -6,8 +6,8 @@ Check:
 - glossary terms applied
 - no invented facts
 - no missing troubleshooting steps
-- clear DevOps/Platform wording
-- no awkward literal Chinese phrasing
+- clear technical wording
+- no awkward literal source-language phrasing
 
 Return:
 1. pass or fail

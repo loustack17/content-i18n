@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/loustack/content-i18n/schemas/content-i18n.schema.json",
+  "$id": "https://github.com/loustack17/content-i18n/schemas/content-i18n.schema.json",
   "title": "content-i18n Configuration",
   "description": "Generic configuration schema for the content-i18n translation harness.",
   "type": "object",

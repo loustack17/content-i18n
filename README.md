@@ -14,8 +14,8 @@ It does not own site routing, theme behavior, or runtime translation widgets.
 content-i18n status --config content-i18n.yaml
 content-i18n list --config content-i18n.yaml
 content-i18n plan --config content-i18n.yaml --file path/to/source.md --to en
-content-i18n translate --config content-i18n.yaml --file path/to/source.md --to en
-content-i18n validate --config content-i18n.yaml --file path/to/target.md
+content-i18n apply-work --config content-i18n.yaml --slug path/to/source.md --dry-run
+content-i18n validate-content --config content-i18n.yaml --file path/to/target.md
 content-i18n validate-site --config content-i18n.yaml
 content-i18n mcp --config content-i18n.yaml
 ```
