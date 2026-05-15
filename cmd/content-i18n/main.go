@@ -245,7 +245,7 @@ func runMCP(configPath string) {
 	cfg, err := loadConfig(configPath)
 	exitOnError(err)
 
-	srv := mcp.NewServer(cfg)
+	srv := mcp.NewServer(cfg, configPath)
 	if err := srv.ServeStdio(); err != nil {
 		fmt.Fprintf(os.Stderr, "mcp server error: %v\n", err)
 		os.Exit(1)

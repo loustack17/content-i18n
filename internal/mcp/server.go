@@ -17,11 +17,12 @@ import (
 )
 
 type Server struct {
-	mcp *server.MCPServer
-	cfg *config.Config
+	mcp        *server.MCPServer
+	cfg        *config.Config
+	configPath string
 }
 
-func NewServer(cfg *config.Config) *Server {
+func NewServer(cfg *config.Config, configPath string) *Server {
 	s := server.NewMCPServer(
 		"content-i18n",
 		"0.1.0",
@@ -29,7 +30,7 @@ func NewServer(cfg *config.Config) *Server {
 		server.WithResourceCapabilities(true, true),
 	)
 
-	srv := &Server{mcp: s, cfg: cfg}
+	srv := &Server{mcp: s, cfg: cfg, configPath: configPath}
 	srv.registerTools()
 	srv.registerResources()
 	return srv
@@ -228,6 +229,10 @@ func (s *Server) handleValidateTranslation(ctx context.Context, req mcp.CallTool
 }
 
 func (s *Server) handleValidateSite(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if s.cfg.Adapter.Name != core.AdapterHugo {
+		return mcp.NewToolResultError(fmt.Sprintf("validate-site only supports hugo adapter (got: %s)", s.cfg.Adapter.Name)), nil
+	}
+
 	warnings := core.ValidateSiteConfig(s.cfg)
 	for _, w := range warnings {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
@@ -276,15 +281,7 @@ func (s *Server) registerResources() {
 }
 
 func (s *Server) handleConfigResource(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	configPath := os.Args[0]
-	for i, arg := range os.Args {
-		if arg == "--config" && i+1 < len(os.Args) {
-			configPath = os.Args[i+1]
-			break
-		}
-	}
-
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(s.configPath)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +371,12 @@ func (s *Server) handlePostResource(ctx context.Context, req mcp.ReadResourceReq
 	}
 
 	fullPath := filepath.Join(targetDir, path)
-	data, err := os.ReadFile(fullPath)
+	cleanPath := filepath.Clean(fullPath)
+	if !strings.HasPrefix(cleanPath, filepath.Clean(targetDir)) {
+		return nil, fmt.Errorf("path traversal detected: %s", path)
+	}
+
+	data, err := os.ReadFile(cleanPath)
 	if err != nil {
 		return nil, err
 	}
