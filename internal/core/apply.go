@@ -9,6 +9,7 @@ import (
 
 	"github.com/loustack17/content-i18n/internal/config"
 	"github.com/loustack17/content-i18n/internal/content"
+	"github.com/loustack17/content-i18n/internal/frontmatter"
 	"github.com/loustack17/content-i18n/internal/validator"
 )
 
@@ -66,11 +67,23 @@ func ApplyWork(cfg *config.Config, slug string, dryRun bool, force bool) error {
 		return nil
 	}
 
+	output := targetData
+	if meta.Provider != "" && meta.Provider != "manual" {
+		doc := frontmatter.Split(string(targetData))
+		injected := frontmatter.InjectProviderMeta(doc, frontmatter.ProviderMeta{
+			Provider: meta.Provider,
+			Quality:  "machine_draft",
+			Reviewed: false,
+			Draft:    true,
+		})
+		output = []byte(injected)
+	}
+
 	if err := os.MkdirAll(filepath.Dir(actualTarget), 0755); err != nil {
 		return fmt.Errorf("create target dir: %w", err)
 	}
 
-	if err := os.WriteFile(actualTarget, targetData, 0644); err != nil {
+	if err := os.WriteFile(actualTarget, output, 0644); err != nil {
 		return fmt.Errorf("write target: %w", err)
 	}
 

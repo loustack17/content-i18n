@@ -23,6 +23,7 @@ type WorkPacket struct {
 type WorkMeta struct {
 	SourcePath     string `json:"source_path"`
 	TargetLanguage string `json:"target_language"`
+	Provider       string `json:"provider,omitempty"`
 }
 
 func SlugFromPath(sourcePath string, sourceRoot string) string {
@@ -103,6 +104,7 @@ func GenerateWorkPacket(cfg *config.Config, sourceFile string, targetLang string
 	meta := WorkMeta{
 		SourcePath:     sourceFile,
 		TargetLanguage: targetLang,
+		Provider:       "manual",
 	}
 	metaData, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {

@@ -144,42 +144,7 @@ func (p *Provider) TranslateBatch(texts []string, sourceLang string, targetLang 
 }
 
 func (p *Provider) CreateGlossary(ctx context.Context, glossaryID string, sourceLang string, targetLang string, entries []GlossaryEntry) error {
-	if len(entries) == 0 {
-		return fmt.Errorf("glossary entries required")
-	}
-
-	parent := fmt.Sprintf("projects/%s/locations/%s", p.project, p.location)
-	glossaryName := fmt.Sprintf("%s/glossaries/%s", parent, glossaryID)
-
-	glossary := &translatepb.Glossary{
-		Name: glossaryName,
-		Languages: &translatepb.Glossary_LanguagePair{
-			LanguagePair: &translatepb.Glossary_LanguageCodePair{
-				SourceLanguageCode: googleLangCode(sourceLang),
-				TargetLanguageCode: googleLangCode(targetLang),
-			},
-		},
-		InputConfig: &translatepb.GlossaryInputConfig{
-			Source: &translatepb.GlossaryInputConfig_GcsSource{
-				GcsSource: &translatepb.GcsSource{
-					InputUri: fmt.Sprintf("gs://%s/glossaries/%s.tsv", p.project, glossaryID),
-				},
-			},
-		},
-	}
-
-	req := &translatepb.CreateGlossaryRequest{
-		Parent:   parent,
-		Glossary: glossary,
-	}
-
-	op, err := p.client.CreateGlossary(ctx, req)
-	if err != nil {
-		return fmt.Errorf("create glossary: %w", err)
-	}
-
-	_, err = op.Wait(ctx)
-	return err
+	return fmt.Errorf("CreateGlossary requires pre-uploaded TSV to GCS; use existing glossary or upload gs://<bucket>/glossaries/<id>.tsv manually, then reference by glossaryID")
 }
 
 func CompileGlossary(entries []GlossaryEntry) string {
