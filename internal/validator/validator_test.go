@@ -19,7 +19,7 @@ func writeTemp(t *testing.T, name, content string) string {
 
 func TestValidate_MissingFrontmatter(t *testing.T) {
 	target := writeTemp(t, "target.md", "no frontmatter here\n")
-	v, err := Validate(target, "")
+	v, err := Validate(target, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestValidate_MissingFrontmatter(t *testing.T) {
 
 func TestValidate_MissingTitle(t *testing.T) {
 	target := writeTemp(t, "target.md", "---\ndraft: true\n---\nbody\n")
-	v, err := Validate(target, "")
+	v, err := Validate(target, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestValidate_MissingTitle(t *testing.T) {
 func TestValidate_CodeBlockCountMismatch(t *testing.T) {
 	source := writeTemp(t, "source.md", "---\ntitle: src\n---\n```go\na\n```\n```go\nb\n```\n")
 	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\n```go\na\n```\n")
-	v, err := Validate(target, source)
+	v, err := Validate(target, source, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestValidate_CodeBlockCountMismatch(t *testing.T) {
 func TestValidate_CodeBlockContentMismatch(t *testing.T) {
 	source := writeTemp(t, "source.md", "---\ntitle: src\n---\n```go\na\n```\n")
 	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\n```go\nb\n```\n")
-	v, err := Validate(target, source)
+	v, err := Validate(target, source, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestValidate_CodeBlockContentMismatch(t *testing.T) {
 func TestValidate_InlineCodeCountMismatch(t *testing.T) {
 	source := writeTemp(t, "source.md", "---\ntitle: src\n---\nuse `foo` and `bar`\n")
 	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\nuse `foo`\n")
-	v, err := Validate(target, source)
+	v, err := Validate(target, source, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestValidate_InlineCodeCountMismatch(t *testing.T) {
 func TestValidate_InlineCodeContentChanged(t *testing.T) {
 	source := writeTemp(t, "source.md", "---\ntitle: src\n---\nuse `foo`\n")
 	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\nuse `bar`\n")
-	v, err := Validate(target, source)
+	v, err := Validate(target, source, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestValidate_InlineCodeContentChanged(t *testing.T) {
 func TestValidate_TranslationKeyMismatch(t *testing.T) {
 	source := writeTemp(t, "source.md", "---\ntitle: src\ntranslationKey: abc\n---\nbody\n")
 	target := writeTemp(t, "target.md", "---\ntitle: tgt\ntranslationKey: xyz\ndraft: true\n---\nbody\n")
-	v, err := Validate(target, source)
+	v, err := Validate(target, source, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestValidate_TranslationKeyMismatch(t *testing.T) {
 
 func TestValidate_CJKInTitle(t *testing.T) {
 	target := writeTemp(t, "target.md", "---\ntitle: 測試 title\ndraft: true\n---\nbody\n")
-	v, err := Validate(target, "")
+	v, err := Validate(target, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestValidate_CJKInTitle(t *testing.T) {
 
 func TestValidate_CJKRatioExceeded(t *testing.T) {
 	target := writeTemp(t, "target.md", "---\ntitle: test\ndraft: true\n---\n這是中文這是中文這是中文這是中文這是中文\n")
-	v, err := Validate(target, "")
+	v, err := Validate(target, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestValidate_CJKRatioExceeded(t *testing.T) {
 func TestValidate_ValidTranslation(t *testing.T) {
 	source := writeTemp(t, "source.md", "---\ntitle: 原始標題\ntranslationKey: test\n---\nuse `code` here\n```go\nfunc main() {}\n```\n")
 	target := writeTemp(t, "target.md", "---\ntitle: Translated Title\ntranslationKey: test\ndraft: true\nreviewed: false\n---\nuse `code` here\n```go\nfunc main() {}\n```\n")
-	v, err := Validate(target, source)
+	v, err := Validate(target, source, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,26 +189,35 @@ func TestValidate_ValidTranslation(t *testing.T) {
 	}
 }
 
-func TestValidateURLsPreserved_MissingURL(t *testing.T) {
-	source := writeTemp(t, "source.md", "check https://example.com\n")
-	target := writeTemp(t, "target.md", "check nothing\n")
-	v, err := ValidateURLsPreserved(target, source)
+func TestValidate_MissingURL(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\ncheck https://example.com\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\ncheck nothing\n")
+	v, err := Validate(target, source, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(v) == 0 {
-		t.Fatal("expected missing URL violation")
+	found := false
+	for _, vv := range v {
+		if vv.Field == "urls" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected missing URL violation, got %v", v)
 	}
 }
 
-func TestValidateURLsPreserved_AllPresent(t *testing.T) {
-	source := writeTemp(t, "source.md", "check https://example.com\n")
-	target := writeTemp(t, "target.md", "check https://example.com\n")
-	v, err := ValidateURLsPreserved(target, source)
+func TestValidate_URLsPresent(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\ncheck https://example.com\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\ncheck https://example.com\n")
+	v, err := Validate(target, source, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(v) != 0 {
-		t.Fatalf("expected no violations, got %v", v)
+	for _, vv := range v {
+		if vv.Field == "urls" {
+			t.Fatalf("unexpected URL violation: %v", vv)
+		}
 	}
 }

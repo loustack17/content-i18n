@@ -7,26 +7,35 @@ import (
 	"github.com/loustack17/content-i18n/internal/validator"
 )
 
-func ValidateContent(targetFile string) error {
+type ValidateOptions struct {
+	SourcePath   string
+	GlossaryPath string
+}
+
+type ValidateResult struct {
+	Passed     bool
+	Violations []validator.Violation
+}
+
+func ValidateContent(targetFile string, opts *ValidateOptions) (*ValidateResult, error) {
 	abs, err := filepath.Abs(targetFile)
 	if err != nil {
-		return fmt.Errorf("resolve path: %w", err)
+		return nil, fmt.Errorf("resolve path: %w", err)
 	}
 
-	violations, err := validator.Validate(abs, "")
+	vOpts := &validator.ValidateOptions{
+		GlossaryPath: opts.GlossaryPath,
+	}
+
+	violations, err := validator.Validate(abs, opts.SourcePath, vOpts)
 	if err != nil {
-		return fmt.Errorf("validate: %w", err)
+		return nil, fmt.Errorf("validate: %w", err)
 	}
 
-	if len(violations) > 0 {
-		for _, v := range violations {
-			fmt.Printf("[%s] %s\n", v.Field, v.Message)
-		}
-		return fmt.Errorf("validation failed with %d issue(s)", len(violations))
-	}
-
-	fmt.Printf("validation passed: %s\n", abs)
-	return nil
+	return &ValidateResult{
+		Passed:     len(violations) == 0,
+		Violations: violations,
+	}, nil
 }
 
 func ValidateSite(cfgPath string) error {

@@ -37,7 +37,7 @@ func ApplyWork(cfg *config.Config, slug string, dryRun bool, force bool) error {
 	}
 
 	// Validate target before writing
-	violations, err := validator.Validate(targetPath, meta.SourcePath)
+	violations, err := validator.Validate(targetPath, meta.SourcePath, nil)
 	if err != nil {
 		return fmt.Errorf("validate: %w", err)
 	}

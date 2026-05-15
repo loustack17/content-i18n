@@ -9,30 +9,38 @@ import (
 
 	"github.com/loustack17/content-i18n/internal/config"
 	"github.com/loustack17/content-i18n/internal/content"
+	"github.com/loustack17/content-i18n/internal/core"
 )
 
 func main() {
 	command, args := parseCommand(os.Args[1:])
-	flags := flag.NewFlagSet(command, flag.ExitOnError)
-	configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
-	if err := flags.Parse(args); err != nil {
-		os.Exit(2)
-	}
 
 	switch command {
 	case "status":
+		flags := flag.NewFlagSet(command, flag.ExitOnError)
+		configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
+		flags.Parse(args)
 		runStatus(*configPath)
 	case "list":
+		flags := flag.NewFlagSet(command, flag.ExitOnError)
+		configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
+		flags.Parse(args)
 		runList(*configPath)
 	case "plan":
-		runPlan(*configPath, flags)
-	case "translate":
-		runTranslate(*configPath, flags)
-	case "validate":
-		runValidate(*configPath, flags)
+		runPlan(args)
+	case "apply-work":
+		runApplyWork(args)
+	case "validate-content":
+		runValidateContent(args)
 	case "validate-site":
+		flags := flag.NewFlagSet(command, flag.ExitOnError)
+		configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
+		flags.Parse(args)
 		runValidateSite(*configPath)
 	case "mcp":
+		flags := flag.NewFlagSet(command, flag.ExitOnError)
+		configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
+		flags.Parse(args)
 		fmt.Printf("content-i18n mcp not yet implemented\nconfig: %s\n", *configPath)
 	case "help":
 		printUsage()
@@ -49,7 +57,7 @@ func parseCommand(args []string) (string, []string) {
 	}
 
 	for i, arg := range args {
-		if arg == "status" || arg == "list" || arg == "plan" || arg == "translate" || arg == "validate" || arg == "validate-site" || arg == "mcp" || arg == "help" {
+		if arg == "status" || arg == "list" || arg == "plan" || arg == "apply-work" || arg == "validate-content" || arg == "validate-site" || arg == "mcp" || arg == "help" {
 			rest := append([]string{}, args[:i]...)
 			rest = append(rest, args[i+1:]...)
 			return arg, rest
@@ -60,7 +68,7 @@ func parseCommand(args []string) (string, []string) {
 }
 
 func printUsage() {
-	fmt.Println("usage: content-i18n [--config path] <status|list|plan|translate|validate|validate-site|mcp>")
+	fmt.Println("usage: content-i18n [--config path] <status|list|plan|apply-work|validate-content|validate-site|mcp>")
 }
 
 func loadConfig(configPath string) (*config.Config, error) {
@@ -116,48 +124,96 @@ func runList(configPath string) {
 	}
 }
 
-func runPlan(configPath string, flags *flag.FlagSet) {
+func runPlan(args []string) {
+	flags := flag.NewFlagSet("plan", flag.ExitOnError)
+	configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
 	file := flags.String("file", "", "source file to plan")
 	to := flags.String("to", "", "target language")
-	flags.Parse(flags.Args())
+	flags.Parse(args)
 
-	if *file == "" || *to == "" {
-		fmt.Fprintln(os.Stderr, "usage: content-i18n plan --file <source.md> --to <lang>")
+	cfg, err := loadConfig(*configPath)
+	exitOnError(err)
+
+	var plans []content.FileInfo
+	if (*file != "") != (*to != "") {
+		fmt.Fprintln(os.Stderr, "error: --file and --to must be used together")
+		os.Exit(2)
+	}
+	if *file != "" && *to != "" {
+		absFile, err := filepath.Abs(*file)
+		exitOnError(err)
+		plans, err = core.Plan(cfg, absFile, *to)
+		exitOnError(err)
+	} else {
+		plans, err = core.Plan(cfg, "", "")
+		exitOnError(err)
+	}
+
+	for _, p := range plans {
+		fmt.Printf("%s -> %s [%s] %s\n", p.SourcePath, p.Language, p.Status, p.TargetPath)
+	}
+}
+
+func runApplyWork(args []string) {
+	flags := flag.NewFlagSet("apply-work", flag.ExitOnError)
+	configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
+	slug := flags.String("slug", "", "content slug to translate")
+	dryRun := flags.Bool("dry-run", false, "show plan without executing")
+	force := flags.Bool("force", false, "override validation errors")
+	flags.Parse(args)
+
+	if *slug == "" {
+		fmt.Fprintln(os.Stderr, "usage: content-i18n apply-work --slug <slug> [--dry-run] [--force]")
 		os.Exit(2)
 	}
 
-	fmt.Printf("plan: %s -> %s\n", *file, *to)
-	fmt.Println("not yet implemented")
+	cfg, err := loadConfig(*configPath)
+	exitOnError(err)
+
+	err = core.ApplyWork(cfg, *slug, *dryRun, *force)
+	exitOnError(err)
 }
 
-func runTranslate(configPath string, flags *flag.FlagSet) {
-	file := flags.String("file", "", "source file to translate")
-	to := flags.String("to", "", "target language")
-	provider := flags.String("provider", "ai-harness", "translation provider")
-	flags.Parse(flags.Args())
-
-	if *file == "" || *to == "" {
-		fmt.Fprintln(os.Stderr, "usage: content-i18n translate --file <source.md> --to <lang> [--provider <provider>]")
-		os.Exit(2)
-	}
-
-	fmt.Printf("translate: %s -> %s (provider: %s)\n", *file, *to, *provider)
-	fmt.Println("not yet implemented")
-}
-
-func runValidate(configPath string, flags *flag.FlagSet) {
+func runValidateContent(args []string) {
+	flags := flag.NewFlagSet("validate-content", flag.ExitOnError)
 	file := flags.String("file", "", "target file to validate")
-	flags.Parse(flags.Args())
+	source := flags.String("source", "", "source file for comparison")
+	glossary := flags.String("glossary", "", "glossary file path")
+	flags.Parse(args)
 
 	if *file == "" {
-		fmt.Fprintln(os.Stderr, "usage: content-i18n validate --file <target.md>")
+		fmt.Fprintln(os.Stderr, "usage: content-i18n validate-content --file <target.md> [--source <source.md>] [--glossary <path>]")
 		os.Exit(2)
 	}
 
-	fmt.Printf("validate: %s\n", *file)
-	fmt.Println("not yet implemented")
+	opts := &core.ValidateOptions{
+		SourcePath:   *source,
+		GlossaryPath: *glossary,
+	}
+
+	result, err := core.ValidateContent(*file, opts)
+	exitOnError(err)
+
+	fmt.Printf("validate-content: %s\n", *file)
+	if result.Passed {
+		fmt.Println("PASS")
+	} else {
+		fmt.Println("FAIL")
+		for _, v := range result.Violations {
+			fmt.Printf("  [%s] %s: %s (fix: %s)\n", v.Field, v.Section, v.Message, v.SuggestedFix)
+		}
+		os.Exit(1)
+	}
 }
 
 func runValidateSite(configPath string) {
-	fmt.Println("validate-site: not yet implemented")
+	err := core.ValidateSite(configPath)
+	exitOnError(err)
+}
+
+func exitOnError(err error) {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 }

@@ -11,11 +11,17 @@ import (
 )
 
 type Violation struct {
-	Field   string
-	Message string
+	Field         string
+	Section       string
+	Message       string
+	SuggestedFix  string
 }
 
-func Validate(targetPath string, sourcePath string) ([]Violation, error) {
+type ValidateOptions struct {
+	GlossaryPath string
+}
+
+func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Violation, error) {
 	var violations []Violation
 
 	targetData, err := os.ReadFile(targetPath)
@@ -26,28 +32,28 @@ func Validate(targetPath string, sourcePath string) ([]Violation, error) {
 	targetContent := string(targetData)
 
 	if !strings.HasPrefix(strings.TrimSpace(targetContent), "---") {
-		violations = append(violations, Violation{Field: "frontmatter", Message: "target missing frontmatter"})
+		violations = append(violations, Violation{Field: "frontmatter", Section: "header", Message: "target missing frontmatter", SuggestedFix: "add YAML frontmatter block"})
 	}
 
 	targetDoc := frontmatter.Split(targetContent)
 
 	if targetDoc.Metadata.Title == "" {
-		violations = append(violations, Violation{Field: "title", Message: "target title missing"})
+		violations = append(violations, Violation{Field: "title", Section: "header", Message: "target title missing", SuggestedFix: "add title to frontmatter"})
 	}
 
 	if targetDoc.Metadata.Draft && !targetDoc.Metadata.Reviewed {
 	} else if !targetDoc.Metadata.Draft && !targetDoc.Metadata.Reviewed {
-		violations = append(violations, Violation{Field: "draft", Message: "draft should be true until reviewed"})
+		violations = append(violations, Violation{Field: "draft", Section: "header", Message: "draft should be true until reviewed", SuggestedFix: "set draft: true"})
 	}
 
 	cjkInTitle := countCJK(targetDoc.Metadata.Title)
 	if cjkInTitle > 0 {
-		violations = append(violations, Violation{Field: "title", Message: fmt.Sprintf("title contains %d CJK character(s)", cjkInTitle)})
+		violations = append(violations, Violation{Field: "title", Section: "header", Message: fmt.Sprintf("title contains %d CJK character(s)", cjkInTitle), SuggestedFix: "translate title to target language"})
 	}
 
 	cjkRatio := cjkRatioInBody(targetDoc.Body)
 	if cjkRatio > 0.05 {
-		violations = append(violations, Violation{Field: "language", Message: fmt.Sprintf("CJK ratio %.1f%% exceeds 5%% threshold", cjkRatio*100)})
+		violations = append(violations, Violation{Field: "language", Section: "body", Message: fmt.Sprintf("CJK ratio %.1f%% exceeds 5%% threshold", cjkRatio*100), SuggestedFix: "translate CJK content or wrap in code/quote"})
 	}
 
 	if sourcePath == "" {
@@ -63,17 +69,17 @@ func Validate(targetPath string, sourcePath string) ([]Violation, error) {
 	sourceDoc := frontmatter.Split(sourceContent)
 
 	if sourceDoc.Metadata.TranslationKey != "" && targetDoc.Metadata.TranslationKey != sourceDoc.Metadata.TranslationKey {
-		violations = append(violations, Violation{Field: "translationKey", Message: "translationKey mismatch"})
+		violations = append(violations, Violation{Field: "translationKey", Section: "header", Message: "translationKey mismatch", SuggestedFix: "set matching translationKey"})
 	}
 
 	sourceCodeBlocks := frontmatter.ExtractCodeBlocks(sourceContent)
 	targetCodeBlocks := frontmatter.ExtractCodeBlocks(targetContent)
 	if len(targetCodeBlocks) != len(sourceCodeBlocks) {
-		violations = append(violations, Violation{Field: "codeBlocks", Message: fmt.Sprintf("target has %d code blocks, source has %d", len(targetCodeBlocks), len(sourceCodeBlocks))})
+		violations = append(violations, Violation{Field: "codeBlocks", Section: "body", Message: fmt.Sprintf("target has %d code blocks, source has %d", len(targetCodeBlocks), len(sourceCodeBlocks)), SuggestedFix: "preserve all code blocks from source"})
 	} else {
 		for i := range sourceCodeBlocks {
 			if strings.TrimSpace(sourceCodeBlocks[i]) != strings.TrimSpace(targetCodeBlocks[i]) {
-				violations = append(violations, Violation{Field: "codeBlocks", Message: fmt.Sprintf("code block %d content differs from source", i+1)})
+				violations = append(violations, Violation{Field: "codeBlocks", Section: "body", Message: fmt.Sprintf("code block %d content differs from source", i+1), SuggestedFix: "restore original code block"})
 				break
 			}
 		}
@@ -82,19 +88,71 @@ func Validate(targetPath string, sourcePath string) ([]Violation, error) {
 	sourceInline := frontmatter.ExtractInlineCode(sourceContent)
 	targetInline := frontmatter.ExtractInlineCode(targetContent)
 	if len(targetInline) < len(sourceInline) {
-		violations = append(violations, Violation{Field: "inlineCode", Message: fmt.Sprintf("target has %d inline code, source has %d", len(targetInline), len(sourceInline))})
+		violations = append(violations, Violation{Field: "inlineCode", Section: "body", Message: fmt.Sprintf("target has %d inline code, source has %d", len(targetInline), len(sourceInline)), SuggestedFix: "preserve all inline code from source"})
 	}
 
 	if len(sourceInline) == len(targetInline) {
 		for i := range sourceInline {
 			if strings.TrimSpace(sourceInline[i]) != strings.TrimSpace(targetInline[i]) {
-				violations = append(violations, Violation{Field: "inlineCode", Message: fmt.Sprintf("inline code %q changed to %q", sourceInline[i], targetInline[i])})
+				violations = append(violations, Violation{Field: "inlineCode", Section: "body", Message: fmt.Sprintf("inline code %q changed to %q", sourceInline[i], targetInline[i]), SuggestedFix: "restore original inline code"})
 				break
 			}
 		}
 	}
 
+	sourceURLs := urlPattern.FindAllString(sourceContent, -1)
+	targetURLs := urlPattern.FindAllString(targetContent, -1)
+	sourceURLSet := make(map[string]bool)
+	for _, u := range sourceURLs {
+		sourceURLSet[u] = true
+	}
+	for _, u := range targetURLs {
+		delete(sourceURLSet, u)
+	}
+	for u := range sourceURLSet {
+		violations = append(violations, Violation{Field: "urls", Section: "body", Message: fmt.Sprintf("URL missing: %s", u), SuggestedFix: "restore URL from source"})
+	}
+
+	if opts != nil && opts.GlossaryPath != "" {
+		glossaryTerms, err := loadGlossaryTerms(opts.GlossaryPath)
+		if err == nil {
+			for _, term := range glossaryTerms {
+				if strings.Contains(sourceContent, term.Source) && !strings.Contains(targetContent, term.Target) {
+					violations = append(violations, Violation{Field: "glossary", Section: "body", Message: fmt.Sprintf("glossary term %q -> %q not found in target", term.Source, term.Target), SuggestedFix: "add glossary term to translation"})
+				}
+			}
+		}
+	}
+
 	return violations, nil
+}
+
+type GlossaryTerm struct {
+	Source string
+	Target string
+}
+
+func loadGlossaryTerms(path string) ([]GlossaryTerm, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var terms []GlossaryTerm
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 2)
+		if len(parts) == 2 {
+			terms = append(terms, GlossaryTerm{
+				Source: strings.TrimSpace(parts[0]),
+				Target: strings.TrimSpace(parts[1]),
+			})
+		}
+	}
+	return terms, nil
 }
 
 func countCJK(s string) int {
@@ -135,32 +193,3 @@ func isCJK(r rune) bool {
 }
 
 var urlPattern = regexp.MustCompile(`https?://[^\s\)\]"<>]+`)
-
-func ValidateURLsPreserved(targetPath string, sourcePath string) ([]Violation, error) {
-	var violations []Violation
-
-	sourceData, err := os.ReadFile(sourcePath)
-	if err != nil {
-		return nil, fmt.Errorf("read source: %w", err)
-	}
-	targetData, err := os.ReadFile(targetPath)
-	if err != nil {
-		return nil, fmt.Errorf("read target: %w", err)
-	}
-
-	sourceURLs := urlPattern.FindAllString(string(sourceData), -1)
-	targetURLs := urlPattern.FindAllString(string(targetData), -1)
-
-	sourceSet := make(map[string]bool)
-	for _, u := range sourceURLs {
-		sourceSet[u] = true
-	}
-	for _, u := range targetURLs {
-		delete(sourceSet, u)
-	}
-	for u := range sourceSet {
-		violations = append(violations, Violation{Field: "urls", Message: fmt.Sprintf("URL missing: %s", u)})
-	}
-
-	return violations, nil
-}
