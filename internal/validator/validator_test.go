@@ -209,8 +209,8 @@ func TestValidate_MissingURL(t *testing.T) {
 }
 
 func TestValidate_URLsPresent(t *testing.T) {
-	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\ncheck https://example.com\n")
-	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\ncheck https://example.com\n")
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\nsource_lang: zh-TW\ntarget_lang: en\n---\ncheck https://example.com\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\nsource_lang: zh-TW\ntarget_lang: en\n---\ncheck https://example.com\n")
 	v, err := Validate(target, source, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -219,5 +219,24 @@ func TestValidate_URLsPresent(t *testing.T) {
 		if vv.Field == "urls" {
 			t.Fatalf("unexpected URL violation: %v", vv)
 		}
+	}
+}
+
+func TestValidate_SourceLangMismatch(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\nsource_lang: zh-TW\ndraft: true\n---\nbody\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\nsource_lang: ja\ndraft: true\n---\nbody\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "language" && strings.Contains(vv.Message, "mismatch") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected source_lang mismatch, got %v", v)
 	}
 }

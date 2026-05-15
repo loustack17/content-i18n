@@ -94,6 +94,10 @@ func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Vi
 		violations = append(violations, Violation{Field: "translationKey", Section: "header", Message: "translationKey mismatch", SuggestedFix: "set matching translationKey"})
 	}
 
+	if sourceDoc.Metadata.SourceLang != "" && targetDoc.Metadata.SourceLang != sourceDoc.Metadata.SourceLang {
+		violations = append(violations, Violation{Field: "language", Section: "header", Message: fmt.Sprintf("source_lang mismatch: source has %q, target has %q", sourceDoc.Metadata.SourceLang, targetDoc.Metadata.SourceLang), SuggestedFix: "set matching source_lang"})
+	}
+
 	sourceCodeBlocks := frontmatter.ExtractCodeBlocks(sourceContent)
 	targetCodeBlocks := frontmatter.ExtractCodeBlocks(targetContent)
 	if len(targetCodeBlocks) != len(sourceCodeBlocks) {
