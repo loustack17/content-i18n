@@ -1,5 +1,13 @@
 package config
 
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v3"
+)
+
 type Config struct {
 	Project     ProjectConfig     `yaml:"project" json:"project"`
 	Paths       PathsConfig       `yaml:"paths" json:"paths"`
@@ -57,4 +65,56 @@ type OutputConfig struct {
 type StyleConfig struct {
 	Pack     string `yaml:"pack" json:"pack"`
 	Glossary string `yaml:"glossary" json:"glossary"`
+}
+
+func Load(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read config: %w", err)
+	}
+
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse config: %w", err)
+	}
+
+	if err := validate(&cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
+}
+
+func validate(cfg *Config) error {
+	if cfg.Project.Type == "" {
+		return fmt.Errorf("project.type required")
+	}
+	if cfg.Project.SourceLanguage == "" {
+		return fmt.Errorf("project.source_language required")
+	}
+	if len(cfg.Project.TargetLanguages) == 0 {
+		return fmt.Errorf("project.target_languages required")
+	}
+	if cfg.Paths.Source == "" {
+		return fmt.Errorf("paths.source required")
+	}
+	if len(cfg.Paths.Targets) == 0 {
+		return fmt.Errorf("paths.targets required")
+	}
+	if cfg.Translation.DefaultProvider == "" {
+		return fmt.Errorf("translation.default_provider required")
+	}
+
+	if _, err := os.Stat(cfg.Paths.Source); err != nil {
+		return fmt.Errorf("paths.source not found: %w", err)
+	}
+
+	for lang, target := range cfg.Paths.Targets {
+		dir := filepath.Dir(target)
+		if _, err := os.Stat(dir); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("paths.targets[%s] error: %w", lang, err)
+		}
+	}
+
+	return nil
 }
