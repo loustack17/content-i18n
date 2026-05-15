@@ -11,6 +11,8 @@ import (
 	"github.com/loustack17/content-i18n/internal/validator"
 )
 
+const AdapterHugo = "hugo"
+
 type ValidateOptions struct {
 	SourcePath   string
 	GlossaryPath string
@@ -102,10 +104,9 @@ func validateSitePaths(cfg *config.Config, publicDir string) (*SiteValidateResul
 
 	for _, lang := range cfg.Project.TargetLanguages {
 		if _, isCanonical := canonical[lang]; !isCanonical {
-			unexpectedPath := filepath.Join(lang, "index.html")
 			fullPath := filepath.Join(publicDir, lang, "index.html")
 			if _, err := os.Stat(fullPath); err == nil {
-				result.Violations = append(result.Violations, fmt.Sprintf("unexpected canonical path for non-canonical language %s: %s", lang, unexpectedPath))
+				result.Violations = append(result.Violations, fmt.Sprintf("unexpected canonical path for non-canonical language %s: %s/index.html", lang, lang))
 			}
 		}
 	}
@@ -133,7 +134,7 @@ func normalizeRouteToIndex(route string) string {
 func ValidateSiteConfig(cfg *config.Config) []string {
 	var warnings []string
 
-	if cfg.Adapter.Name == "hugo" {
+	if cfg.Adapter.Name == AdapterHugo {
 		if cfg.URLPolicy.Canonical == nil || len(cfg.URLPolicy.Canonical) == 0 {
 			warnings = append(warnings, "hugo adapter requires url_policy.canonical to be set")
 		}

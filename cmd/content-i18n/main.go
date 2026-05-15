@@ -213,7 +213,7 @@ func runValidateSite(configPath string) {
 	cfg, err := loadConfig(configPath)
 	exitOnError(err)
 
-	if cfg.Adapter.Name != "hugo" {
+	if cfg.Adapter.Name != core.AdapterHugo {
 		fmt.Fprintf(os.Stderr, "error: validate-site only supports hugo adapter (got: %s)\n", cfg.Adapter.Name)
 		os.Exit(2)
 	}
