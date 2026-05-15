@@ -240,3 +240,120 @@ func TestValidate_SourceLangMismatch(t *testing.T) {
 		t.Fatalf("expected source_lang mismatch, got %v", v)
 	}
 }
+
+func TestTone_AbstractOpenerThreshold(t *testing.T) {
+	body := strings.Repeat("The system is designed to handle requests.\n", 6)
+	target := writeTemp(t, "target.md", "---\ntitle: Test\ndraft: true\n---\n"+body)
+
+	opts := &ValidateOptions{
+		ToneChecks: ToneCheckOptions{
+			AbstractOpenerThreshold: 3,
+		},
+	}
+	v, err := Validate(target, "", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "tone" && strings.Contains(vv.Message, "abstract openers") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected abstract opener violation, got %v", v)
+	}
+}
+
+func TestTone_AbstractOpenerUnderThreshold(t *testing.T) {
+	body := "The system is designed to handle requests.\nThe user is expected to follow guidelines.\n"
+	target := writeTemp(t, "target.md", "---\ntitle: Test\ndraft: true\n---\n"+body)
+
+	opts := &ValidateOptions{
+		ToneChecks: ToneCheckOptions{
+			AbstractOpenerThreshold: 3,
+		},
+	}
+	v, err := Validate(target, "", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, vv := range v {
+		if vv.Field == "tone" && strings.Contains(vv.Message, "abstract openers") {
+			t.Fatalf("unexpected abstract opener violation: %v", vv)
+		}
+	}
+}
+
+func TestTone_AbstractTermOveruse(t *testing.T) {
+	body := "The identity of the identity provider affects identity management. Identity is critical.\n"
+	target := writeTemp(t, "target.md", "---\ntitle: Test\ndraft: true\n---\n"+body)
+
+	opts := &ValidateOptions{
+		ToneChecks: ToneCheckOptions{
+			AbstractTerms: []string{"identity"},
+		},
+	}
+	v, err := Validate(target, "", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "tone" && strings.Contains(vv.Message, "abstract term") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected abstract term violation, got %v", v)
+	}
+}
+
+func TestTone_HeadingDocLikePrefix(t *testing.T) {
+	body := "## Overview of the system\n## Introduction to configuration\n## Prerequisites for setup\n"
+	target := writeTemp(t, "target.md", "---\ntitle: Test\ndraft: true\n---\n"+body)
+
+	opts := &ValidateOptions{
+		ToneChecks: ToneCheckOptions{
+			HeadingDocLikePrefixes: []string{"overview", "introduction", "prerequisites"},
+		},
+	}
+	v, err := Validate(target, "", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "tone" && strings.Contains(vv.Message, "doc-like prefix") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected heading phrasing violation, got %v", v)
+	}
+}
+
+func TestTone_NoViolationsWhenClean(t *testing.T) {
+	body := "## How we reduced latency by 40%%\n\nWe replaced the connection pool with a shared channel. The benchmark shows a 40%% improvement.\n"
+	target := writeTemp(t, "target.md", "---\ntitle: Test\ndraft: true\n---\n"+body)
+
+	opts := &ValidateOptions{
+		ToneChecks: ToneCheckOptions{
+			AbstractOpenerThreshold: 3,
+			AbstractTerms:           []string{"identity"},
+			HeadingDocLikePrefixes:  []string{"overview", "introduction"},
+		},
+	}
+	v, err := Validate(target, "", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, vv := range v {
+		if vv.Field == "tone" {
+			t.Fatalf("unexpected tone violation: %v", vv)
+		}
+	}
+}

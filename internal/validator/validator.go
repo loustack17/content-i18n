@@ -3,6 +3,7 @@ package validator
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -21,6 +22,13 @@ type Violation struct {
 type ValidateOptions struct {
 	GlossaryPath string
 	BannedWords  []string
+	ToneChecks   ToneCheckOptions
+}
+
+type ToneCheckOptions struct {
+	AbstractOpenerThreshold int
+	AbstractTerms           []string
+	HeadingDocLikePrefixes  []string
 }
 
 func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Violation, error) {
@@ -77,6 +85,10 @@ func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Vi
 					violations = append(violations, Violation{Field: "style", Section: "body", Message: fmt.Sprintf("banned wording %q found in target", banned), SuggestedFix: "replace with approved terminology"})
 				}
 			}
+		}
+
+		if opts != nil {
+			violations = append(violations, checkTone(targetDoc.Body, opts.ToneChecks, opts.GlossaryPath)...)
 		}
 
 		return violations, nil
@@ -156,6 +168,10 @@ func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Vi
 				violations = append(violations, Violation{Field: "style", Section: "body", Message: fmt.Sprintf("banned wording %q found in target", banned), SuggestedFix: "replace with approved terminology"})
 			}
 		}
+	}
+
+	if opts != nil {
+		violations = append(violations, checkTone(targetDoc.Body, opts.ToneChecks, opts.GlossaryPath)...)
 	}
 
 	return violations, nil
@@ -269,4 +285,88 @@ func isTitleCapitalized(title string) bool {
 		}
 	}
 	return true
+}
+
+func checkTone(body string, opts ToneCheckOptions, glossaryPath string) []Violation {
+	var violations []Violation
+
+	if opts.AbstractOpenerThreshold > 0 {
+		violations = append(violations, checkAbstractOpeners(body, opts.AbstractOpenerThreshold)...)
+	}
+
+	if len(opts.AbstractTerms) > 0 {
+		violations = append(violations, checkAbstractTermOveruse(body, opts.AbstractTerms, glossaryPath)...)
+	}
+
+	if len(opts.HeadingDocLikePrefixes) > 0 {
+		violations = append(violations, checkHeadingPhrasing(body, opts.HeadingDocLikePrefixes)...)
+	}
+
+	return violations
+}
+
+var abstractOpenerRe = regexp.MustCompile(`(?m)^(?:The|This|These|Those|A|An)\s+\w+\s+(?:is|are|was|were|has|have)\b`)
+
+func checkAbstractOpeners(body string, threshold int) []Violation {
+	matches := abstractOpenerRe.FindAllString(body, -1)
+	if len(matches) > threshold {
+		return []Violation{{
+			Field:        "tone",
+			Section:      "body",
+			Message:      fmt.Sprintf("%d repeated abstract openers (e.g. 'The ... is ...') exceed threshold %d", len(matches), threshold),
+			SuggestedFix: "vary sentence openers; use active voice or concrete subjects",
+		}}
+	}
+	return nil
+}
+
+func checkAbstractTermOveruse(body string, abstractTerms []string, glossaryPath string) []Violation {
+	glossaryTargets := make(map[string]bool)
+	if glossaryPath != "" {
+		terms, err := loadGlossaryTerms(glossaryPath)
+		if err == nil {
+			for _, t := range terms {
+				glossaryTargets[strings.ToLower(t.Target)] = true
+			}
+		}
+	}
+
+	bodyLower := strings.ToLower(body)
+	for _, term := range abstractTerms {
+		termLower := strings.ToLower(term)
+		count := strings.Count(bodyLower, termLower)
+		if count > 2 && !glossaryTargets[termLower] {
+			return []Violation{{
+				Field:        "tone",
+				Section:      "body",
+				Message:      fmt.Sprintf("abstract term %q appears %d times; prefer concrete glossary terms", term, count),
+				SuggestedFix: "replace with concrete terminology or approved glossary equivalent",
+			}}
+		}
+	}
+	return nil
+}
+
+var headingRe = regexp.MustCompile(`(?m)^#{1,6}\s+(.*)`)
+
+func checkHeadingPhrasing(body string, docLikePrefixes []string) []Violation {
+	headings := headingRe.FindAllStringSubmatch(body, -1)
+	var violations []Violation
+	for _, h := range headings {
+		if len(h) < 2 {
+			continue
+		}
+		headingText := strings.TrimSpace(h[1])
+		for _, prefix := range docLikePrefixes {
+			if strings.HasPrefix(strings.ToLower(headingText), prefix) {
+				violations = append(violations, Violation{
+					Field:        "tone",
+					Section:      "heading",
+					Message:      fmt.Sprintf("heading %q uses doc-like prefix %q", headingText, prefix),
+					SuggestedFix: "use blog-style action/outcome headings instead of documentation labels",
+				})
+			}
+		}
+	}
+	return violations
 }
