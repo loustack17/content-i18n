@@ -9,8 +9,12 @@ avoid:
   - literal source-language sentence order
   - marketing language
 rules:
-  titles: "Translate titles into natural technical English."
-  headings: "Keep heading hierarchy. Improve clarity when the source heading is too terse."
+  titles: "Translate titles into natural technical English. Keep the original meaning."
+  headings: "Keep heading hierarchy exactly. Translate heading text. Do not add, remove, merge, or split heading levels."
   code: "Do not translate code, commands, config keys, package names, API names, resource names, or error strings."
-  links: "Preserve URLs. Translate link text only when natural."
-  frontmatter: "Translate title, description, summary, keywords when present. Preserve date, slug, aliases, tags unless configured."
+  links: "Preserve URLs exactly. Translate link text when the source-language text would be unclear to English readers."
+  frontmatter: "Translate title, description, summary, keywords. Preserve date, slug, aliases, tags as-is."
+  structure: "Preserve paragraph count, list count and nesting, table dimensions, blockquotes, and horizontal rules. Translate prose within each element."
+  examples: "Keep all examples and code samples in the same order. Translate surrounding explanatory text."
+  argument_flow: "Keep the source's section order and reasoning flow. Do not reorder, merge, or split sections."
+  style_class: "Match the source's genre (debugging walkthrough, tutorial, post-mortem, etc.). Do not add editorial commentary, opinions, or summaries absent from the source."
