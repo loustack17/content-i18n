@@ -2,7 +2,7 @@ name: na-devops-platform
 voice:
   audience: "North American DevOps, Platform, SRE, and backend engineering readers"
   tone: "clear, practical, technically precise"
-  rewrite_level: "translate and lightly adapt, not literal machine translation"
+  rewrite_level: "translate and adapt for natural English readability, not literal machine translation"
 prefer_terms:
   - deployment
   - rollout
