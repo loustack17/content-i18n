@@ -432,7 +432,7 @@ func (s *Server) handlePrepareTranslation(ctx context.Context, req mcp.CallToolR
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	var promptData, glossaryData, styleData string
+	var promptData, glossaryData, styleData, contextData string
 	if data, err := os.ReadFile(packet.PromptPath); err == nil {
 		promptData = string(data)
 	}
@@ -441,6 +441,9 @@ func (s *Server) handlePrepareTranslation(ctx context.Context, req mcp.CallToolR
 	}
 	if data, err := os.ReadFile(packet.StylePath); err == nil {
 		styleData = string(data)
+	}
+	if data, err := os.ReadFile(packet.ContextPath); err == nil {
+		contextData = string(data)
 	}
 
 	metaData, err := os.ReadFile(packet.MetaPath)
@@ -458,6 +461,7 @@ func (s *Server) handlePrepareTranslation(ctx context.Context, req mcp.CallToolR
 		"prompt":      promptData,
 		"glossary":    glossaryData,
 		"style":       styleData,
+		"context":     contextData,
 		"fingerprint": meta.Fingerprint,
 		"target_path": packet.TargetPath,
 	}, "", "  ")
