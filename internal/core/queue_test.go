@@ -10,20 +10,25 @@ import (
 
 	"github.com/loustack17/content-i18n/internal/config"
 	"github.com/loustack17/content-i18n/internal/core"
+	"github.com/stretchr/testify/require"
 )
 
 func fileHash(path string) string {
-	data, _ := os.ReadFile(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
 	return fmt.Sprintf("%x", sha256.Sum256(data))
 }
 
 func writeStatus(t *testing.T, cfg *config.Config, entries map[string]string) {
 	t.Helper()
 	statusDir := filepath.Dir(cfg.StatusFilePath())
-	os.MkdirAll(statusDir, 0755)
+	require.NoError(t, os.MkdirAll(statusDir, 0755))
 	store := map[string]any{"entries": entries}
-	data, _ := json.MarshalIndent(store, "", "  ")
-	os.WriteFile(cfg.StatusFilePath(), data, 0644)
+	data, err := json.MarshalIndent(store, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(cfg.StatusFilePath(), data, 0644))
 }
 
 func setupQueueTest(t *testing.T) (string, *config.Config) {

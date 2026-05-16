@@ -61,13 +61,20 @@ func main() {
 	}
 }
 
+var knownCommands = map[string]bool{
+	"status": true, "list": true, "plan": true, "apply-work": true,
+	"validate-content": true, "validate-site": true, "mcp": true,
+	"prepare": true, "review": true, "repair-plan": true,
+	"next": true, "batch-status": true, "help": true,
+}
+
 func parseCommand(args []string) (string, []string) {
 	if len(args) == 0 {
 		return "help", nil
 	}
 
 	for i, arg := range args {
-		if arg == "status" || arg == "list" || arg == "plan" || arg == "apply-work" || arg == "validate-content" || arg == "validate-site" || arg == "mcp" || arg == "prepare" || arg == "review" || arg == "repair-plan" || arg == "next" || arg == "batch-status" || arg == "help" {
+		if knownCommands[arg] {
 			rest := append([]string{}, args[:i]...)
 			rest = append(rest, args[i+1:]...)
 			return arg, rest

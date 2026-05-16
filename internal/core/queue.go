@@ -100,17 +100,13 @@ func NextTranslation(cfg *config.Config, group string) (*QueueEntry, error) {
 }
 
 func matchesGroup(sourcePath string, group string) bool {
-	rel, err := filepath.Rel(filepath.Dir(sourcePath), sourcePath)
-	if err != nil {
-		return true
-	}
-	_ = rel
-	dir := filepath.Base(filepath.Dir(sourcePath))
-	parentDir := filepath.Base(filepath.Dir(filepath.Dir(sourcePath)))
 	groupLower := strings.ToLower(group)
-	return strings.Contains(strings.ToLower(dir), groupLower) ||
-		strings.Contains(strings.ToLower(parentDir), groupLower) ||
-		strings.Contains(strings.ToLower(sourcePath), groupLower)
+	sourceLower := strings.ToLower(sourcePath)
+	dir := strings.ToLower(filepath.Base(filepath.Dir(sourcePath)))
+	parentDir := strings.ToLower(filepath.Base(filepath.Dir(filepath.Dir(sourcePath))))
+	return strings.Contains(dir, groupLower) ||
+		strings.Contains(parentDir, groupLower) ||
+		strings.Contains(sourceLower, groupLower)
 }
 
 type QueueStore struct {

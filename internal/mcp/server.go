@@ -606,13 +606,16 @@ func (s *Server) handleNextTranslation(ctx context.Context, req mcp.CallToolRequ
 		return mcp.NewToolResultText("queue empty"), nil
 	}
 
-	out, _ := json.MarshalIndent(map[string]any{
+	out, err := json.MarshalIndent(map[string]any{
 		"source":      entry.SourcePath,
 		"target":      entry.TargetPath,
 		"language":    entry.Language,
 		"status":      string(entry.Status),
 		"source_hash": entry.SourceHash,
 	}, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	return mcp.NewToolResultText(string(out)), nil
 }
 
@@ -634,12 +637,15 @@ func (s *Server) handleTranslationQueue(ctx context.Context, req mcp.CallToolReq
 		}
 	}
 
-	out, _ := json.MarshalIndent(map[string]any{
+	out, err := json.MarshalIndent(map[string]any{
 		"total":     status.Total,
 		"completed": status.Completed,
 		"stale":     status.Stale,
 		"missing":   status.Missing,
 		"next":      next,
 	}, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	return mcp.NewToolResultText(string(out)), nil
 }
