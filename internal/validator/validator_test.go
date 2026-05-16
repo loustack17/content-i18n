@@ -241,6 +241,96 @@ func TestValidate_SourceLangMismatch(t *testing.T) {
 	}
 }
 
+func TestStructure_HeadingCountMismatch(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\n## Heading One\n\n## Heading Two\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\n## Heading One\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "structure" && strings.Contains(vv.Message, "H2 headings") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected heading count violation, got %v", v)
+	}
+}
+
+func TestStructure_ListCountMismatch(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\n- item one\n- item two\n- item three\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\n- item one\n- item two\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "structure" && strings.Contains(vv.Message, "unordered list") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected list count violation, got %v", v)
+	}
+}
+
+func TestStructure_TableCountMismatch(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\n| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\n| A | B |\n|---|---|\n| 1 | 2 |\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "structure" && strings.Contains(vv.Message, "table rows") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected table count violation, got %v", v)
+	}
+}
+
+func TestStructure_BlockquoteMismatch(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\n> note one\n\n> note two\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\n> note one\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "structure" && strings.Contains(vv.Message, "blockquotes") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected blockquote violation, got %v", v)
+	}
+}
+
+func TestStructure_MatchingStructure(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\nsource_lang: zh-TW\ntarget_lang: en\ndraft: true\n---\n## Heading\n\n- item one\n- item two\n\n> note\n\n`code`\n\n```go\nfunc main() {}\n```\n")
+	target := writeTemp(t, "target.md", "---\ntitle: Tgt\nsource_lang: zh-TW\ntarget_lang: en\ndraft: true\n---\n## Heading\n\n- item one\n- item two\n\n> note\n\n`code`\n\n```go\nfunc main() {}\n```\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, vv := range v {
+		if vv.Field == "structure" {
+			t.Fatalf("unexpected structure violation: %v", vv)
+		}
+	}
+}
+
 func TestTone_AbstractOpenerThreshold(t *testing.T) {
 	body := strings.Repeat("The system is designed to handle requests.\n", 6)
 	target := writeTemp(t, "target.md", "---\ntitle: Test\ndraft: true\n---\n"+body)

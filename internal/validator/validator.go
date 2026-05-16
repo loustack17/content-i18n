@@ -12,13 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Violation struct {
-	Field        string
-	Section      string
-	Message      string
-	SuggestedFix string
-}
-
 type ValidateOptions struct {
 	GlossaryPath string
 	BannedWords  []string
@@ -29,6 +22,24 @@ type ToneCheckOptions struct {
 	AbstractOpenerThreshold int
 	AbstractTerms           []string
 	HeadingDocLikePrefixes  []string
+}
+
+var (
+	vH2Re    = regexp.MustCompile(`(?m)^## `)
+	vH3Re    = regexp.MustCompile(`(?m)^### `)
+	vH4Re    = regexp.MustCompile(`(?m)^#### `)
+	vOLRe    = regexp.MustCompile(`(?m)^\d+\.\s`)
+	vULRe    = regexp.MustCompile(`(?m)^[-*+]\s`)
+	vTableRe = regexp.MustCompile(`(?m)^\|`)
+	vBQRe    = regexp.MustCompile(`(?m)^> `)
+	vFenceRe = regexp.MustCompile("(?m)^```")
+)
+
+type Violation struct {
+	Field        string
+	Section      string
+	Message      string
+	SuggestedFix string
 }
 
 func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Violation, error) {
@@ -150,6 +161,8 @@ func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Vi
 	for u := range sourceURLSet {
 		violations = append(violations, Violation{Field: "urls", Section: "body", Message: fmt.Sprintf("URL missing: %s", u), SuggestedFix: "restore URL from source"})
 	}
+
+	violations = append(violations, checkStructure(sourceContent, targetContent)...)
 
 	if opts != nil && opts.GlossaryPath != "" {
 		glossaryTerms, err := loadGlossaryTerms(opts.GlossaryPath)
@@ -369,4 +382,73 @@ func checkHeadingPhrasing(body string, docLikePrefixes []string) []Violation {
 		}
 	}
 	return violations
+}
+
+func checkStructure(source, target string) []Violation {
+	var violations []Violation
+
+	srcBody := extractBody(source)
+	tgtBody := extractBody(target)
+
+	srcH2 := len(vH2Re.FindAllString(source, -1))
+	tgtH2 := len(vH2Re.FindAllString(target, -1))
+	if srcH2 != tgtH2 {
+		violations = append(violations, Violation{Field: "structure", Section: "headings", Message: fmt.Sprintf("target has %d H2 headings, source has %d", tgtH2, srcH2), SuggestedFix: "preserve heading hierarchy from source"})
+	}
+
+	srcH3 := len(vH3Re.FindAllString(source, -1))
+	tgtH3 := len(vH3Re.FindAllString(target, -1))
+	if srcH3 != tgtH3 {
+		violations = append(violations, Violation{Field: "structure", Section: "headings", Message: fmt.Sprintf("target has %d H3 headings, source has %d", tgtH3, srcH3), SuggestedFix: "preserve heading hierarchy from source"})
+	}
+
+	srcH4 := len(vH4Re.FindAllString(source, -1))
+	tgtH4 := len(vH4Re.FindAllString(target, -1))
+	if srcH4 != tgtH4 {
+		violations = append(violations, Violation{Field: "structure", Section: "headings", Message: fmt.Sprintf("target has %d H4 headings, source has %d", tgtH4, srcH4), SuggestedFix: "preserve heading hierarchy from source"})
+	}
+
+	srcOL := len(vOLRe.FindAllString(srcBody, -1))
+	tgtOL := len(vOLRe.FindAllString(tgtBody, -1))
+	if srcOL != tgtOL {
+		violations = append(violations, Violation{Field: "structure", Section: "lists", Message: fmt.Sprintf("target has %d ordered list items, source has %d", tgtOL, srcOL), SuggestedFix: "preserve list structure from source"})
+	}
+
+	srcUL := len(vULRe.FindAllString(srcBody, -1))
+	tgtUL := len(vULRe.FindAllString(tgtBody, -1))
+	if srcUL != tgtUL {
+		violations = append(violations, Violation{Field: "structure", Section: "lists", Message: fmt.Sprintf("target has %d unordered list items, source has %d", tgtUL, srcUL), SuggestedFix: "preserve list structure from source"})
+	}
+
+	srcTables := len(vTableRe.FindAllString(srcBody, -1))
+	tgtTables := len(vTableRe.FindAllString(tgtBody, -1))
+	if srcTables != tgtTables {
+		violations = append(violations, Violation{Field: "structure", Section: "tables", Message: fmt.Sprintf("target has %d table rows, source has %d", tgtTables, srcTables), SuggestedFix: "preserve table structure from source"})
+	}
+
+	srcBQ := len(vBQRe.FindAllString(srcBody, -1))
+	tgtBQ := len(vBQRe.FindAllString(tgtBody, -1))
+	if srcBQ != tgtBQ {
+		violations = append(violations, Violation{Field: "structure", Section: "blockquotes", Message: fmt.Sprintf("target has %d blockquotes, source has %d", tgtBQ, srcBQ), SuggestedFix: "preserve blockquote structure from source"})
+	}
+
+	srcFences := len(vFenceRe.FindAllString(source, -1)) / 2
+	tgtFences := len(vFenceRe.FindAllString(target, -1)) / 2
+	if srcFences != tgtFences {
+		violations = append(violations, Violation{Field: "structure", Section: "code", Message: fmt.Sprintf("target has %d fenced code blocks, source has %d", tgtFences, srcFences), SuggestedFix: "preserve all code blocks from source"})
+	}
+
+	return violations
+}
+
+func extractBody(markdown string) string {
+	if !strings.HasPrefix(markdown, "---\n") {
+		return markdown
+	}
+	rest := strings.TrimPrefix(markdown, "---\n")
+	parts := strings.SplitN(rest, "\n---\n", 2)
+	if len(parts) != 2 {
+		return markdown
+	}
+	return parts[1]
 }

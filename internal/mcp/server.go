@@ -61,7 +61,7 @@ func (s *Server) registerTools() {
 	), s.handleReadSource)
 
 	s.mcp.AddTool(mcp.NewTool("content_i18n_create_work_packet",
-		mcp.WithDescription("Create a work packet for translating a source file"),
+		mcp.WithDescription("Create a work packet for translating a source file. Includes structure fingerprint for fidelity validation."),
 		mcp.WithString("source",
 			mcp.Required(),
 			mcp.Description("Absolute path to source file"),
@@ -73,19 +73,19 @@ func (s *Server) registerTools() {
 	), s.handleCreateWorkPacket)
 
 	s.mcp.AddTool(mcp.NewTool("content_i18n_write_translation_target",
-		mcp.WithDescription("Write translated content to a work packet target file"),
+		mcp.WithDescription("Write translated content to a work packet target file. Fidelity-first: preserve source structure, headings, lists, tables, code blocks, URLs. Only language changes."),
 		mcp.WithString("slug",
 			mcp.Required(),
 			mcp.Description("Work packet slug"),
 		),
 		mcp.WithString("content",
 			mcp.Required(),
-			mcp.Description("Translated markdown content"),
+			mcp.Description("Translated markdown content. Must match source structure exactly."),
 		),
 	), s.handleWriteTranslationTarget)
 
 	s.mcp.AddTool(mcp.NewTool("content_i18n_validate_translation",
-		mcp.WithDescription("Validate a translated file for integrity issues"),
+		mcp.WithDescription("Validate a translated file for integrity and fidelity-first compliance. Checks: code blocks, inline code, headings, lists, tables, blockquotes, URLs, glossary terms, CJK ratio, tone."),
 		mcp.WithString("file",
 			mcp.Required(),
 			mcp.Description("Path to target file to validate"),

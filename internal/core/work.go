@@ -1,10 +1,12 @@
 package core
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/loustack17/content-i18n/internal/config"
@@ -24,6 +26,7 @@ type WorkMeta struct {
 	SourcePath     string `json:"source_path"`
 	TargetLanguage string `json:"target_language"`
 	Provider       string `json:"provider,omitempty"`
+	StructureHash  string `json:"structure_hash"`
 }
 
 func SlugFromPath(sourcePath string, sourceRoot string) string {
@@ -105,6 +108,7 @@ func GenerateWorkPacket(cfg *config.Config, sourceFile string, targetLang string
 		SourcePath:     sourceFile,
 		TargetLanguage: targetLang,
 		Provider:       "manual",
+		StructureHash:  computeStructureHash(string(sourceData)),
 	}
 	metaData, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
@@ -123,4 +127,83 @@ func GenerateWorkPacket(cfg *config.Config, sourceFile string, targetLang string
 		StylePath:    filepath.Join(workDir, "style.md"),
 		MetaPath:     filepath.Join(workDir, "meta.json"),
 	}, nil
+}
+
+type StructureFingerprint struct {
+	HeadingCount       int `json:"heading_count"`
+	H2Count            int `json:"h2_count"`
+	H3Count            int `json:"h3_count"`
+	H4Count            int `json:"h4_count"`
+	OrderedListCount   int `json:"ordered_list_count"`
+	UnorderedListCount int `json:"unordered_list_count"`
+	TableCount         int `json:"table_count"`
+	ParagraphCount     int `json:"paragraph_count"`
+	BlockquoteCount    int `json:"blockquote_count"`
+	CodeBlockCount     int `json:"code_block_count"`
+}
+
+var (
+	h2Re    = regexp.MustCompile(`(?m)^## `)
+	h3Re    = regexp.MustCompile(`(?m)^### `)
+	h4Re    = regexp.MustCompile(`(?m)^#### `)
+	olRe    = regexp.MustCompile(`(?m)^\d+\.\s`)
+	ulRe    = regexp.MustCompile(`(?m)^[-*+]\s`)
+	tableRe = regexp.MustCompile(`(?m)^\|`)
+	bqRe    = regexp.MustCompile(`(?m)^> `)
+	fenceRe = regexp.MustCompile("(?m)^```")
+)
+
+func countParagraphs(body string) int {
+	lines := strings.Split(body, "\n")
+	count := 0
+	inBlock := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if inBlock {
+				count++
+				inBlock = false
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "|") || strings.HasPrefix(trimmed, ">") {
+			if inBlock {
+				count++
+				inBlock = false
+			}
+			continue
+		}
+		inBlock = true
+	}
+	if inBlock {
+		count++
+	}
+	return count
+}
+
+func computeStructureHash(markdown string) string {
+	body := markdown
+	if idx := strings.Index(markdown, "---\n"); idx >= 0 {
+		rest := markdown[idx+4:]
+		if endIdx := strings.Index(rest, "\n---\n"); endIdx >= 0 {
+			body = rest[endIdx+5:]
+		}
+	}
+
+	fp := StructureFingerprint{
+		HeadingCount:       len(h2Re.FindAllString(markdown, -1)) + len(h3Re.FindAllString(markdown, -1)) + len(h4Re.FindAllString(markdown, -1)),
+		H2Count:            len(h2Re.FindAllString(markdown, -1)),
+		H3Count:            len(h3Re.FindAllString(markdown, -1)),
+		H4Count:            len(h4Re.FindAllString(markdown, -1)),
+		OrderedListCount:   len(olRe.FindAllString(body, -1)),
+		UnorderedListCount: len(ulRe.FindAllString(body, -1)),
+		TableCount:         len(tableRe.FindAllString(body, -1)),
+		ParagraphCount:     countParagraphs(body),
+		BlockquoteCount:    len(bqRe.FindAllString(body, -1)),
+		CodeBlockCount:     len(fenceRe.FindAllString(markdown, -1)) / 2,
+	}
+
+	data, _ := json.Marshal(fp)
+	h := sha256.Sum256(data)
+	return fmt.Sprintf("%x", h[:8])
 }
