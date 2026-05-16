@@ -408,6 +408,34 @@ func checkStructure(source, target string) []Violation {
 		violations = append(violations, Violation{Field: "structure", Section: "headings", Message: fmt.Sprintf("target has %d H4 headings, source has %d", tgtH4, srcH4), SuggestedFix: "preserve heading hierarchy from source"})
 	}
 
+	srcHeadings := extractHeadings(source)
+	tgtHeadings := extractHeadings(target)
+	if len(srcHeadings) == len(tgtHeadings) {
+		for i := range srcHeadings {
+			srcNorm := normalizeHeadingText(srcHeadings[i])
+			tgtNorm := normalizeHeadingText(tgtHeadings[i])
+			if srcNorm == tgtNorm {
+				continue
+			}
+			srcWords := strings.Fields(srcNorm)
+			tgtWords := strings.Fields(tgtNorm)
+			common := 0
+			for _, sw := range srcWords {
+				for _, tw := range tgtWords {
+					if strings.EqualFold(sw, tw) {
+						common++
+						break
+					}
+				}
+			}
+			if common == 0 {
+				continue
+			}
+			violations = append(violations, Violation{Field: "structure", Section: "headings", Message: fmt.Sprintf("heading order mismatch at position %d: source has %q, target has %q", i+1, srcHeadings[i], tgtHeadings[i]), SuggestedFix: "preserve section order from source"})
+			break
+		}
+	}
+
 	srcOL := len(vOLRe.FindAllString(srcBody, -1))
 	tgtOL := len(vOLRe.FindAllString(tgtBody, -1))
 	if srcOL != tgtOL {
@@ -424,6 +452,17 @@ func checkStructure(source, target string) []Violation {
 	tgtTables := len(vTableRe.FindAllString(tgtBody, -1))
 	if srcTables != tgtTables {
 		violations = append(violations, Violation{Field: "structure", Section: "tables", Message: fmt.Sprintf("target has %d table rows, source has %d", tgtTables, srcTables), SuggestedFix: "preserve table structure from source"})
+	}
+
+	srcTableCols := countTableColumns(srcBody)
+	tgtTableCols := countTableColumns(tgtBody)
+	if len(srcTableCols) == len(tgtTableCols) {
+		for i := range srcTableCols {
+			if srcTableCols[i] != tgtTableCols[i] {
+				violations = append(violations, Violation{Field: "structure", Section: "tables", Message: fmt.Sprintf("table %d has %d columns in target, %d in source", i+1, tgtTableCols[i], srcTableCols[i]), SuggestedFix: "preserve table column count from source"})
+				break
+			}
+		}
 	}
 
 	srcBQ := len(vBQRe.FindAllString(srcBody, -1))
@@ -444,7 +483,88 @@ func checkStructure(source, target string) []Violation {
 		violations = append(violations, Violation{Field: "structure", Section: "paragraphs", Message: fmt.Sprintf("target has %d paragraphs, source has %d", tgtParas, srcParas), SuggestedFix: "preserve paragraph count from source; do not merge or split paragraphs"})
 	}
 
+	violations = append(violations, checkOmission(srcBody, tgtBody)...)
+
 	return violations
+}
+
+var vHeadingRe = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
+
+func extractHeadings(markdown string) []string {
+	matches := vHeadingRe.FindAllStringSubmatch(markdown, -1)
+	result := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if len(m) >= 2 {
+			result = append(result, strings.TrimSpace(m[1]+" "+m[2]))
+		}
+	}
+	return result
+}
+
+func normalizeHeadingText(heading string) string {
+	parts := strings.SplitN(heading, " ", 2)
+	if len(parts) < 2 {
+		return heading
+	}
+	return strings.ToLower(strings.TrimSpace(parts[1]))
+}
+
+func countTableColumns(body string) []int {
+	var cols []int
+	var currentTableLines []string
+	inTable := false
+
+	lines := strings.Split(body, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "|") {
+			if !inTable {
+				currentTableLines = []string{}
+				inTable = true
+			}
+			currentTableLines = append(currentTableLines, trimmed)
+		} else {
+			if inTable && len(currentTableLines) > 0 {
+				firstRow := currentTableLines[0]
+				if firstRow == "|---|" || !strings.Contains(firstRow, "---") {
+					cellCount := strings.Count(firstRow, "|") - 1
+					if cellCount > 0 {
+						cols = append(cols, cellCount)
+					}
+				}
+			}
+			inTable = false
+			currentTableLines = nil
+		}
+	}
+	if inTable && len(currentTableLines) > 0 {
+		firstRow := currentTableLines[0]
+		if firstRow == "|---|" || !strings.Contains(firstRow, "---") {
+			cellCount := strings.Count(firstRow, "|") - 1
+			if cellCount > 0 {
+				cols = append(cols, cellCount)
+			}
+		}
+	}
+	return cols
+}
+
+func checkOmission(srcBody, tgtBody string) []Violation {
+	srcWords := len(strings.Fields(srcBody))
+	tgtWords := len(strings.Fields(tgtBody))
+	if srcWords == 0 {
+		return nil
+	}
+	ratio := float64(tgtWords) / float64(srcWords)
+	if ratio < 0.5 {
+		return []Violation{{
+			Field:        "omission",
+			Section:      "body",
+			Message:      fmt.Sprintf("target has %d%% of source word count (%d vs %d words)", int(ratio*100), tgtWords, srcWords),
+			SuggestedFix: "check for missing sections, examples, or explanatory text",
+		}}
+	}
+	return nil
 }
 
 func countParagraphs(body string) int {

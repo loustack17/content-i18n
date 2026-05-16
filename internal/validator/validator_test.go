@@ -350,6 +350,77 @@ func TestStructure_ParagraphCountMismatch(t *testing.T) {
 	}
 }
 
+func TestStructure_HeadingOrderMismatch(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\n## Setup Guide\n\n## Configuration Guide\n\n## Testing Guide\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\n## Setup Guide\n\n## Testing Guide\n\n## Configuration Guide\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "structure" && strings.Contains(vv.Message, "heading order mismatch") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected heading order violation, got %v", v)
+	}
+}
+
+func TestStructure_HeadingOrderPreserved(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\n## 設定方法\n\n## テスト手順\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\n## Setup\n\n## Testing Steps\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, vv := range v {
+		if vv.Field == "structure" && strings.Contains(vv.Message, "heading order") {
+			t.Fatalf("unexpected heading order violation for translated headings: %v", vv)
+		}
+	}
+}
+
+func TestStructure_TableColumnCountMismatch(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\n| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\n| A | B |\n|---|---|\n| 1 | 2 |\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "structure" && strings.Contains(vv.Message, "columns") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected table column violation, got %v", v)
+	}
+}
+
+func TestStructure_OmissionHeuristic(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\nThis is a detailed explanation of how the system works with multiple paragraphs covering setup, configuration, testing, deployment, and troubleshooting steps that an engineer would need to follow.\n\nThe second paragraph covers advanced topics including load balancing, circuit breakers, retry policies, and health checks.\n\nA third paragraph discusses monitoring, alerting, and incident response procedures.\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\nIt works.\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "omission" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected omission violation, got %v", v)
+	}
+}
+
 func TestTone_AbstractOpenerThreshold(t *testing.T) {
 	body := strings.Repeat("The system is designed to handle requests.\n", 6)
 	target := writeTemp(t, "target.md", "---\ntitle: Test\ndraft: true\n---\n"+body)
