@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/loustack17/content-i18n/internal/config"
+	"github.com/loustack17/content-i18n/internal/content"
 )
 
 type WorkPacket struct {
@@ -19,6 +20,7 @@ type WorkPacket struct {
 	PromptPath   string
 	GlossaryPath string
 	StylePath    string
+	ContextPath  string
 	MetaPath     string
 }
 
@@ -28,6 +30,8 @@ type WorkMeta struct {
 	Provider       string               `json:"provider,omitempty"`
 	StructureHash  string               `json:"structure_hash"`
 	Fingerprint    StructureFingerprint `json:"fingerprint"`
+	Headings       []string             `json:"headings"`
+	URLs           []string             `json:"urls"`
 }
 
 func SlugFromPath(sourcePath string, sourceRoot string) string {
@@ -105,13 +109,18 @@ func GenerateWorkPacket(cfg *config.Config, sourceFile string, targetLang string
 		}
 	}
 
-	fp := computeFingerprint(string(sourceData))
+	sourceText := string(sourceData)
+	fp := computeFingerprint(sourceText)
+	headings := extractMarkdownHeadings(sourceText)
+	urls := uniqueStrings(content.URLPattern.FindAllString(sourceText, -1))
 	meta := WorkMeta{
 		SourcePath:     sourceFile,
 		TargetLanguage: targetLang,
 		Provider:       "manual",
 		StructureHash:  fp.Hash,
 		Fingerprint:    fp.Fingerprint,
+		Headings:       headings,
+		URLs:           urls,
 	}
 	metaData, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
@@ -121,6 +130,11 @@ func GenerateWorkPacket(cfg *config.Config, sourceFile string, targetLang string
 		return nil, fmt.Errorf("write meta: %w", err)
 	}
 
+	contextData := buildHarnessContext(meta)
+	if err := os.WriteFile(filepath.Join(workDir, "context.md"), []byte(contextData), 0644); err != nil {
+		return nil, fmt.Errorf("write context: %w", err)
+	}
+
 	return &WorkPacket{
 		Dir:          workDir,
 		SourcePath:   filepath.Join(workDir, "source.md"),
@@ -128,6 +142,7 @@ func GenerateWorkPacket(cfg *config.Config, sourceFile string, targetLang string
 		PromptPath:   filepath.Join(workDir, "prompt.md"),
 		GlossaryPath: filepath.Join(workDir, "glossary.md"),
 		StylePath:    filepath.Join(workDir, "style.md"),
+		ContextPath:  filepath.Join(workDir, "context.md"),
 		MetaPath:     filepath.Join(workDir, "meta.json"),
 	}, nil
 }
@@ -151,14 +166,15 @@ type FingerprintResult struct {
 }
 
 var (
-	h2Re    = regexp.MustCompile(`(?m)^## `)
-	h3Re    = regexp.MustCompile(`(?m)^### `)
-	h4Re    = regexp.MustCompile(`(?m)^#### `)
-	olRe    = regexp.MustCompile(`(?m)^\d+\.\s`)
-	ulRe    = regexp.MustCompile(`(?m)^[-*+]\s`)
-	tableRe = regexp.MustCompile(`(?m)^\|`)
-	bqRe    = regexp.MustCompile(`(?m)^> `)
-	fenceRe = regexp.MustCompile("(?m)^```")
+	h2Re      = regexp.MustCompile(`(?m)^## `)
+	h3Re      = regexp.MustCompile(`(?m)^### `)
+	h4Re      = regexp.MustCompile(`(?m)^#### `)
+	olRe      = regexp.MustCompile(`(?m)^\d+\.\s`)
+	ulRe      = regexp.MustCompile(`(?m)^[-*+]\s`)
+	tableRe   = regexp.MustCompile(`(?m)^\|`)
+	bqRe      = regexp.MustCompile(`(?m)^> `)
+	fenceRe   = regexp.MustCompile("(?m)^```")
+	headingRe = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
 )
 
 func countParagraphs(body string) int {
@@ -214,4 +230,70 @@ func computeFingerprint(markdown string) FingerprintResult {
 	data, _ := json.Marshal(fp)
 	h := sha256.Sum256(data)
 	return FingerprintResult{Fingerprint: fp, Hash: fmt.Sprintf("%x", h[:8])}
+}
+
+func extractMarkdownHeadings(markdown string) []string {
+	matches := headingRe.FindAllStringSubmatch(markdown, -1)
+	out := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if len(m) >= 3 {
+			out = append(out, strings.TrimSpace(m[1]+" "+m[2]))
+		}
+	}
+	return out
+}
+
+func uniqueStrings(items []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if seen[item] {
+			continue
+		}
+		seen[item] = true
+		out = append(out, item)
+	}
+	return out
+}
+
+func buildHarnessContext(meta WorkMeta) string {
+	var b strings.Builder
+	b.WriteString("# Translation Harness Context\n\n")
+	b.WriteString("## Hard Contract\n\n")
+	b.WriteString("- Translate language only.\n")
+	b.WriteString("- Preserve structure, content coverage, argument flow, and style class.\n")
+	b.WriteString("- Do not summarize, compress, merge, split, or editorialize.\n")
+	b.WriteString("- The English target must be the same article in another language.\n\n")
+	b.WriteString("## Source Structure Fingerprint\n\n")
+	fmt.Fprintf(&b, "- structure_hash: `%s`\n", meta.StructureHash)
+	fmt.Fprintf(&b, "- H2 headings: %d\n", meta.Fingerprint.H2Count)
+	fmt.Fprintf(&b, "- H3 headings: %d\n", meta.Fingerprint.H3Count)
+	fmt.Fprintf(&b, "- H4 headings: %d\n", meta.Fingerprint.H4Count)
+	fmt.Fprintf(&b, "- ordered list items: %d\n", meta.Fingerprint.OrderedListCount)
+	fmt.Fprintf(&b, "- unordered list items: %d\n", meta.Fingerprint.UnorderedListCount)
+	fmt.Fprintf(&b, "- table rows: %d\n", meta.Fingerprint.TableCount)
+	fmt.Fprintf(&b, "- paragraphs: %d\n", meta.Fingerprint.ParagraphCount)
+	fmt.Fprintf(&b, "- blockquotes: %d\n", meta.Fingerprint.BlockquoteCount)
+	fmt.Fprintf(&b, "- fenced code blocks: %d\n\n", meta.Fingerprint.CodeBlockCount)
+	b.WriteString("## Heading Order\n\n")
+	for i, h := range meta.Headings {
+		fmt.Fprintf(&b, "%d. %s\n", i+1, h)
+	}
+	b.WriteString("\n## Preserved URLs\n\n")
+	if len(meta.URLs) == 0 {
+		b.WriteString("- none\n")
+	} else {
+		for _, u := range meta.URLs {
+			fmt.Fprintf(&b, "- %s\n", u)
+		}
+	}
+	b.WriteString("\n## Translation Self-Check\n\n")
+	b.WriteString("1. Heading hierarchy and order match source.\n")
+	b.WriteString("2. Paragraph count per section matches source.\n")
+	b.WriteString("3. Lists, tables, examples, references, blockquotes, and URLs remain present.\n")
+	b.WriteString("4. Code blocks, inline code, commands, and identifiers remain exact.\n")
+	b.WriteString("5. No Mandarin prose remains in the English target.\n")
+	b.WriteString("6. No section is shortened into a summary.\n")
+	b.WriteString("7. Style class matches source.\n")
+	return b.String()
 }

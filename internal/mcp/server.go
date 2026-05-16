@@ -98,6 +98,42 @@ func (s *Server) registerTools() {
 	s.mcp.AddTool(mcp.NewTool("content_i18n_validate_site",
 		mcp.WithDescription("Validate Hugo site URL policy and canonical routes"),
 	), s.handleValidateSite)
+
+	s.mcp.AddTool(mcp.NewTool("content_i18n_prepare_translation",
+		mcp.WithDescription("High-level: prepare everything needed to translate a source file. Returns source content, prompt, glossary, style rules, and structure fingerprint in one call. Use this instead of separate read_source + create_work_packet calls."),
+		mcp.WithString("source",
+			mcp.Required(),
+			mcp.Description("Absolute path to source file"),
+		),
+		mcp.WithString("language",
+			mcp.Required(),
+			mcp.Description("Target language code"),
+		),
+	), s.handlePrepareTranslation)
+
+	s.mcp.AddTool(mcp.NewTool("content_i18n_review_translation",
+		mcp.WithDescription("High-level: review a translation against its source. Returns validation result, structure comparison, and actionable issues with severity. Use this instead of validate_translation when you want structured feedback."),
+		mcp.WithString("source",
+			mcp.Required(),
+			mcp.Description("Absolute path to source file"),
+		),
+		mcp.WithString("target",
+			mcp.Required(),
+			mcp.Description("Absolute path to translated target file"),
+		),
+	), s.handleReviewTranslation)
+
+	s.mcp.AddTool(mcp.NewTool("content_i18n_repair_translation",
+		mcp.WithDescription("High-level: write a repaired translation to a work packet target. Validates the repair against source structure before writing. Returns validation result."),
+		mcp.WithString("slug",
+			mcp.Required(),
+			mcp.Description("Work packet slug"),
+		),
+		mcp.WithString("content",
+			mcp.Required(),
+			mcp.Description("Repaired translated markdown content"),
+		),
+	), s.handleRepairTranslation)
 }
 
 func (s *Server) handleStatus(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -181,6 +217,7 @@ func (s *Server) handleCreateWorkPacket(ctx context.Context, req mcp.CallToolReq
 		"prompt":   packet.PromptPath,
 		"glossary": packet.GlossaryPath,
 		"style":    packet.StylePath,
+		"meta":     packet.MetaPath,
 	}, "", "  ")
 	return mcp.NewToolResultText(string(out)), nil
 }
@@ -372,4 +409,169 @@ func (s *Server) handlePostResource(ctx context.Context, req mcp.ReadResourceReq
 			Text:     string(data),
 		},
 	}, nil
+}
+
+func (s *Server) handlePrepareTranslation(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	source, err := req.RequireString("source")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	lang, err := req.RequireString("language")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	slug := core.SlugFromPath(source, s.cfg.Paths.Source)
+	packet, err := core.GenerateWorkPacket(s.cfg, source, lang)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	sourceData, err := os.ReadFile(source)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	var promptData, glossaryData, styleData string
+	if data, err := os.ReadFile(packet.PromptPath); err == nil {
+		promptData = string(data)
+	}
+	if data, err := os.ReadFile(packet.GlossaryPath); err == nil {
+		glossaryData = string(data)
+	}
+	if data, err := os.ReadFile(packet.StylePath); err == nil {
+		styleData = string(data)
+	}
+
+	metaData, err := os.ReadFile(packet.MetaPath)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	var meta core.WorkMeta
+	if err := json.Unmarshal(metaData, &meta); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	out, _ := json.MarshalIndent(map[string]any{
+		"slug":        slug,
+		"source":      string(sourceData),
+		"prompt":      promptData,
+		"glossary":    glossaryData,
+		"style":       styleData,
+		"fingerprint": meta.Fingerprint,
+		"target_path": packet.TargetPath,
+	}, "", "  ")
+	return mcp.NewToolResultText(string(out)), nil
+}
+
+func (s *Server) handleReviewTranslation(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	source, err := req.RequireString("source")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	target, err := req.RequireString("target")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	opts := &core.ValidateOptions{
+		SourcePath: source,
+		Config:     s.cfg,
+	}
+	result, err := core.ValidateContent(target, opts)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	sourceData, _ := os.ReadFile(source)
+	targetData, _ := os.ReadFile(target)
+	srcWords := len(strings.Fields(string(sourceData)))
+	tgtWords := len(strings.Fields(string(targetData)))
+
+	type issue struct {
+		Severity     string `json:"severity"`
+		Field        string `json:"field"`
+		Section      string `json:"section"`
+		Message      string `json:"message"`
+		SuggestedFix string `json:"suggested_fix"`
+	}
+
+	var issues []issue
+	for _, v := range result.Violations {
+		severity := "warning"
+		if v.Field == "codeBlocks" || v.Field == "inlineCode" || v.Field == "urls" {
+			severity = "error"
+		}
+		if v.Field == "structure" {
+			severity = "error"
+		}
+		issues = append(issues, issue{
+			Severity:     severity,
+			Field:        v.Field,
+			Section:      v.Section,
+			Message:      v.Message,
+			SuggestedFix: v.SuggestedFix,
+		})
+	}
+
+	out, _ := json.MarshalIndent(map[string]any{
+		"passed":       result.Passed,
+		"source_words": srcWords,
+		"target_words": tgtWords,
+		"word_ratio":   fmt.Sprintf("%.0f%%", float64(tgtWords)/float64(srcWords)*100),
+		"issues":       issues,
+	}, "", "  ")
+	return mcp.NewToolResultText(string(out)), nil
+}
+
+func (s *Server) handleRepairTranslation(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	slug, err := req.RequireString("slug")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	content, err := req.RequireString("content")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	metaPath := filepath.Join("work", slug, "meta.json")
+	metaData, err := os.ReadFile(metaPath)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	var meta core.WorkMeta
+	if err := json.Unmarshal(metaData, &meta); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	targetPath := filepath.Join("work", slug, "target.md")
+
+	tmpFile := targetPath + ".repair"
+	if err := os.WriteFile(tmpFile, []byte(content), 0644); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	opts := &core.ValidateOptions{
+		SourcePath: meta.SourcePath,
+		Config:     s.cfg,
+	}
+	result, err := core.ValidateContent(tmpFile, opts)
+	os.Remove(tmpFile)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	if !result.Passed {
+		var lines []string
+		for _, v := range result.Violations {
+			lines = append(lines, fmt.Sprintf("[%s] %s: %s", v.Field, v.Section, v.Message))
+		}
+		return mcp.NewToolResultText("REPAIR FAILED\n" + strings.Join(lines, "\n")), nil
+	}
+
+	if err := os.WriteFile(targetPath, []byte(content), 0644); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	return mcp.NewToolResultText(fmt.Sprintf("REPAIR OK\nwrote %d bytes to %s", len(content), targetPath)), nil
 }
