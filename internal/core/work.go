@@ -23,10 +23,11 @@ type WorkPacket struct {
 }
 
 type WorkMeta struct {
-	SourcePath     string `json:"source_path"`
-	TargetLanguage string `json:"target_language"`
-	Provider       string `json:"provider,omitempty"`
-	StructureHash  string `json:"structure_hash"`
+	SourcePath     string               `json:"source_path"`
+	TargetLanguage string               `json:"target_language"`
+	Provider       string               `json:"provider,omitempty"`
+	StructureHash  string               `json:"structure_hash"`
+	Fingerprint    StructureFingerprint `json:"fingerprint"`
 }
 
 func SlugFromPath(sourcePath string, sourceRoot string) string {
@@ -104,11 +105,13 @@ func GenerateWorkPacket(cfg *config.Config, sourceFile string, targetLang string
 		}
 	}
 
+	fp := computeFingerprint(string(sourceData))
 	meta := WorkMeta{
 		SourcePath:     sourceFile,
 		TargetLanguage: targetLang,
 		Provider:       "manual",
-		StructureHash:  computeStructureHash(string(sourceData)),
+		StructureHash:  fp.Hash,
+		Fingerprint:    fp.Fingerprint,
 	}
 	metaData, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
@@ -140,6 +143,11 @@ type StructureFingerprint struct {
 	ParagraphCount     int `json:"paragraph_count"`
 	BlockquoteCount    int `json:"blockquote_count"`
 	CodeBlockCount     int `json:"code_block_count"`
+}
+
+type FingerprintResult struct {
+	Fingerprint StructureFingerprint
+	Hash        string
 }
 
 var (
@@ -181,7 +189,7 @@ func countParagraphs(body string) int {
 	return count
 }
 
-func computeStructureHash(markdown string) string {
+func computeFingerprint(markdown string) FingerprintResult {
 	body := markdown
 	if idx := strings.Index(markdown, "---\n"); idx >= 0 {
 		rest := markdown[idx+4:]
@@ -205,5 +213,5 @@ func computeStructureHash(markdown string) string {
 
 	data, _ := json.Marshal(fp)
 	h := sha256.Sum256(data)
-	return fmt.Sprintf("%x", h[:8])
+	return FingerprintResult{Fingerprint: fp, Hash: fmt.Sprintf("%x", h[:8])}
 }

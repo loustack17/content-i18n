@@ -23,12 +23,12 @@ avoid:
   - resume-sounding exaggeration
   - tutorial filler
 rules:
-  titles: "Translate titles into natural technical English."
-  headings: "Keep heading hierarchy exactly. Improve clarity when the source heading is too terse. Do not add, remove, merge, or split headings."
+  titles: "Translate titles into natural technical English. Keep the original meaning."
+  headings: "Keep heading hierarchy exactly. Translate heading text freely — clarity matters more than literal match. Do not add, remove, merge, or split heading levels."
   code: "Do not translate code, commands, config keys, package names, API names, resource names, or error strings."
-  links: "Preserve URLs exactly. Translate link text only when natural."
-  frontmatter: "Translate title, description, summary, keywords when present. Preserve date, slug, aliases, tags unless configured."
-  structure: "Preserve paragraph count, list count and nesting, table dimensions, blockquotes, and horizontal rules. Only language changes."
-  examples: "Preserve all examples, code samples, and their surrounding explanatory text in the same order."
-  argument_flow: "Preserve the source's argument flow: introduction → problem → analysis → solution → conclusion. Do not reorder sections."
-  style_class: "Match the source's genre: debugging walkthrough, tutorial, post-mortem, etc. Do not editorialize."
+  links: "Preserve URLs exactly. Translate link text when the source-language text would be unclear to English readers."
+  frontmatter: "Translate title, description, summary, keywords. Preserve date, slug, aliases, tags as-is."
+  structure: "Preserve paragraph count, list count and nesting, table dimensions, blockquotes, and horizontal rules. Prose within each element may be rewritten for clarity."
+  examples: "Keep all examples and code samples in the same order. Translate surrounding explanatory text freely."
+  argument_flow: "Keep the source's section order and reasoning flow. Do not reorder, merge, or split sections."
+  style_class: "Match the source's genre (debugging walkthrough, tutorial, post-mortem, etc.). Do not add editorial commentary, opinions, or summaries absent from the source."

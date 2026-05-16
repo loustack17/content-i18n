@@ -438,7 +438,41 @@ func checkStructure(source, target string) []Violation {
 		violations = append(violations, Violation{Field: "structure", Section: "code", Message: fmt.Sprintf("target has %d fenced code blocks, source has %d", tgtFences, srcFences), SuggestedFix: "preserve all code blocks from source"})
 	}
 
+	srcParas := countParagraphs(srcBody)
+	tgtParas := countParagraphs(tgtBody)
+	if srcParas != tgtParas {
+		violations = append(violations, Violation{Field: "structure", Section: "paragraphs", Message: fmt.Sprintf("target has %d paragraphs, source has %d", tgtParas, srcParas), SuggestedFix: "preserve paragraph count from source; do not merge or split paragraphs"})
+	}
+
 	return violations
+}
+
+func countParagraphs(body string) int {
+	lines := strings.Split(body, "\n")
+	count := 0
+	inBlock := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if inBlock {
+				count++
+				inBlock = false
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "|") || strings.HasPrefix(trimmed, ">") {
+			if inBlock {
+				count++
+				inBlock = false
+			}
+			continue
+		}
+		inBlock = true
+	}
+	if inBlock {
+		count++
+	}
+	return count
 }
 
 func extractBody(markdown string) string {

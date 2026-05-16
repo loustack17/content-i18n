@@ -331,6 +331,25 @@ func TestStructure_MatchingStructure(t *testing.T) {
 	}
 }
 
+func TestStructure_ParagraphCountMismatch(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\nFirst paragraph here.\n\nSecond paragraph here.\n\nThird paragraph here.\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\nFirst paragraph here.\n\nSecond and third merged together.\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "structure" && strings.Contains(vv.Message, "paragraphs") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected paragraph count violation, got %v", v)
+	}
+}
+
 func TestTone_AbstractOpenerThreshold(t *testing.T) {
 	body := strings.Repeat("The system is designed to handle requests.\n", 6)
 	target := writeTemp(t, "target.md", "---\ntitle: Test\ndraft: true\n---\n"+body)
