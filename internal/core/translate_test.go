@@ -285,3 +285,203 @@ draft: true
 
 	os.RemoveAll("work")
 }
+
+func TestAgentUsability_PrepareReturnsAllArtifacts(t *testing.T) {
+	tmpDir, cfg := setupTestDir(t)
+
+	sourcePath := filepath.Join(tmpDir, "src", "article.md")
+	os.WriteFile(sourcePath, []byte(`---
+title: 測試文章
+source_lang: zh-TW
+draft: true
+---
+## 標題一
+
+這是第一段。
+
+## 標題二
+
+- 項目一
+- 項目二
+
+`+"```go"+`
+func main() {}
+`+"```"+`
+
+> 這是引用。
+
+https://example.com/docs
+`), 0644)
+
+	result, err := core.TranslatePrepare(cfg, sourcePath, "en")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	checks := map[string]bool{
+		"source":      result.Source != "",
+		"prompt":      result.Prompt != "",
+		"glossary":    true,
+		"style":       true,
+		"context":     result.Context != "",
+		"fingerprint": result.Fingerprint.H2Count > 0,
+		"slug":        result.Slug != "",
+		"target_path": result.TargetPath != "",
+	}
+
+	for field, ok := range checks {
+		if !ok {
+			t.Fatalf("prepare missing required field: %s", field)
+		}
+	}
+
+	if !strings.Contains(result.Context, "Heading Order") {
+		t.Fatal("context missing heading order")
+	}
+	if !strings.Contains(result.Context, "Self-Check") {
+		t.Fatal("context missing self-check")
+	}
+}
+
+func TestAgentUsability_ReviewReturnsStructuredGuidance(t *testing.T) {
+	tmpDir, cfg := setupTestDir(t)
+
+	sourcePath := filepath.Join(tmpDir, "src", "article.md")
+	targetPath := filepath.Join(tmpDir, "en", "article.md")
+
+	os.WriteFile(sourcePath, []byte(`---
+title: 測試
+source_lang: zh-TW
+target_lang: en
+draft: true
+---
+## Heading One
+
+## Heading Two
+
+## Heading Three
+
+Paragraph one.
+
+Paragraph two.
+`), 0644)
+
+	os.WriteFile(targetPath, []byte(`---
+title: Test
+source_lang: zh-TW
+target_lang: en
+draft: true
+---
+## Heading One
+
+Paragraph one.
+`), 0644)
+
+	result, err := core.TranslateReview(cfg, sourcePath, targetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.Passed {
+		t.Fatal("expected review to fail for bad translation")
+	}
+	if result.WordRatio == "" {
+		t.Fatal("expected word ratio")
+	}
+	if len(result.Issues) == 0 {
+		t.Fatal("expected issues array")
+	}
+
+	hasSeverity := false
+	hasFix := false
+	for _, issue := range result.Issues {
+		if issue.Severity != "" {
+			hasSeverity = true
+		}
+		if issue.SuggestedFix != "" {
+			hasFix = true
+		}
+	}
+	if !hasSeverity {
+		t.Fatal("expected issues with severity")
+	}
+	if !hasFix {
+		t.Fatal("expected issues with suggested_fix")
+	}
+}
+
+func TestAgentUsability_EndToEndLoop(t *testing.T) {
+	tmpDir, cfg := setupTestDir(t)
+
+	sourcePath := filepath.Join(tmpDir, "src", "loop.md")
+	os.WriteFile(sourcePath, []byte(`---
+title: 循環測試
+source_lang: zh-TW
+draft: true
+---
+## 第一步
+
+這是第一步。
+
+## 第二步
+
+這是第二步。
+`), 0644)
+
+	result, err := core.TranslatePrepare(cfg, sourcePath, "en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Slug == "" {
+		t.Fatal("expected slug")
+	}
+
+	badTranslation := `---
+title: Loop Test
+source_lang: zh-TW
+target_lang: en
+draft: true
+---
+## Step One
+
+This is step one.
+`
+
+	badTargetPath := filepath.Join(tmpDir, "en", "loop.md")
+	os.WriteFile(badTargetPath, []byte(badTranslation), 0644)
+
+	reviewResult, err := core.TranslateReview(cfg, sourcePath, badTargetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if reviewResult.Passed {
+		t.Fatal("expected review to fail for incomplete translation")
+	}
+
+	goodTranslation := `---
+title: Loop Test
+source_lang: zh-TW
+target_lang: en
+draft: true
+---
+## Step One
+
+This is step one.
+
+## Step Two
+
+This is step two.
+`
+
+	os.WriteFile(badTargetPath, []byte(goodTranslation), 0644)
+
+	reviewResult, err = core.TranslateReview(cfg, sourcePath, badTargetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reviewResult.Passed {
+		t.Fatalf("expected review to pass for good translation, got: %v", reviewResult.Issues)
+	}
+}

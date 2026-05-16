@@ -1,58 +1,87 @@
 # content-i18n
 
-Repo-local i18n harness for Markdown and static-site content.
+Standalone AI-assisted i18n harness for Markdown and static-site content.
 
-## Status
+Fidelity-first translation: only the language changes. Structure, content coverage, argument flow, emphasis, and style class are preserved.
 
-Current accepted progress:
+## Quick start
 
-- Tasks 1–12 complete
-- Core + CLI complete
-- Validation engine complete for content integrity and Hugo site URL policy
-- Next target: Task 13 MCP wrappers
+```bash
+go build ./cmd/content-i18n
+./content-i18n status --config content-i18n.yaml
+```
 
-## Scope
-
-`content-i18n` manages:
-
-- content discovery
-- translation work packets
-- validation
-- glossary/style packs
-- provider fallback
-- MCP wrappers
-
-It does not own site routing, theme behavior, or runtime translation widgets.
-
-## Current commands
+## Commands
 
 ```bash
 content-i18n status --config content-i18n.yaml
 content-i18n list --config content-i18n.yaml
-content-i18n plan --config content-i18n.yaml --file path/to/source.md --to en
-content-i18n apply-work --config content-i18n.yaml --slug my-post --dry-run
-content-i18n apply-work --config content-i18n.yaml --slug my-post
-content-i18n validate-content --config content-i18n.yaml --file path/to/target.md
+content-i18n plan --config content-i18n.yaml --file <source.md> --to <lang>
+content-i18n prepare --config content-i18n.yaml --file <source.md> --to <lang>
+content-i18n review --config content-i18n.yaml --file <target.md> --source <source.md>
+content-i18n repair-plan --config content-i18n.yaml --file <target.md> --source <source.md>
+content-i18n apply-work --config content-i18n.yaml --slug <slug> [--dry-run] [--force]
+content-i18n validate-content --config content-i18n.yaml --file <target.md> [--source <source.md>]
 content-i18n validate-site --config content-i18n.yaml
 content-i18n mcp --config content-i18n.yaml
 ```
 
-## Example smoke commands
+## AI agent workflow
 
-Generic Markdown validation:
+An AI agent can translate a post with a single instruction:
+
+> Use content-i18n to translate `<source>` fidelity-first and keep fixing until review passes.
+
+The tool provides all harness context, review criteria, and repair guidance. No large custom prompt needed.
+
+### MCP workflow (preferred)
+
+1. Call `content_i18n_prepare_translation(source, language)` — returns source, prompt, glossary, style, context, fingerprint
+2. Translate using the returned context
+3. Call `content_i18n_review_translation(source, target)` — returns pass/fail, word ratio, severity-tagged issues
+4. If review fails, fix issues and call `content_i18n_repair_translation(slug, content)` — validates before writing
+5. Repeat review until pass
+6. Call `content_i18n_apply_work` or write directly to target path
+
+### CLI workflow
 
 ```bash
-go run ./cmd/content-i18n validate-content \
-  --config examples/generic-markdown/content-i18n.yaml \
-  --file examples/generic-markdown/docs/en/test.md
+# Step 1: prepare — get source + context + fingerprint
+content-i18n prepare --file content/posts/source.md --to en
+
+# Step 2: translate (agent writes target.md)
+
+# Step 3: review — check fidelity
+content-i18n review --file work/slug/target.md --source content/posts/source.md
+
+# Step 4: repair if needed
+content-i18n repair-plan --file work/slug/target.md --source content/posts/source.md
+
+# Step 5: apply when review passes
+content-i18n apply-work --slug <slug>
 ```
 
-Hugo URL policy validation:
+## Fidelity-first contract
 
-```bash
-go run ./cmd/content-i18n validate-site \
-  --config examples/hugo/content-i18n.yaml
-```
+content-i18n is a translation harness, not an editorial rewriting tool.
+
+| Preserved | Translated |
+|-----------|------------|
+| Heading hierarchy and order | Prose within each element |
+| Paragraph count per section | Link text (without changing meaning) |
+| List count and nesting | Frontmatter title/description/keywords |
+| Table dimensions | Glossary terms applied when applicable |
+| Code blocks (byte-for-byte) | |
+| Inline code | |
+| URLs | |
+| Examples and references | |
+| Argument flow | |
+| Style class | |
+
+## Architecture
+
+See [docs/architecture.md](docs/architecture.md) for package structure.
+See [docs/agent-workflow.md](docs/agent-workflow.md) for AI agent usage details.
 
 ## Verification
 
