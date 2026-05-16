@@ -10,7 +10,7 @@ STRUCTURE RULES (non-negotiable):
 - Preserve the exact heading hierarchy: same number of headings, same nesting levels (## vs ### vs ####).
 - Preserve all lists: same number of items, same nesting (ordered/unordered), same bullet style.
 - Preserve all tables: same columns, same rows, same alignment markers.
-- Preserve all examples, code samples, and their surrounding explanatory text.
+- Preserve all examples, code samples, and their surrounding explanatory text in the same order. Translate explanatory text without changing technical meaning, emphasis, or coverage.
 - Preserve all references: links, citations, footnotes, cross-references.
 - Preserve paragraph count per section: do not merge or split paragraphs.
 - Preserve the argument flow: introduction → problem → analysis → solution → conclusion.
@@ -20,7 +20,7 @@ CONTENT RULES:
 - Preserve fenced code blocks exactly (byte-for-byte).
 - Preserve inline code exactly.
 - Preserve commands, config keys, API names, resource names, package names, and error strings exactly.
-- Preserve all URLs exactly. Translate link text only when natural.
+- Preserve all URLs exactly. Translate link text without changing meaning or emphasis.
 - Translate prose naturally, not literally.
 - Use glossary terms exactly when applicable.
 - Do not add facts, examples, or sections not present in the source.
