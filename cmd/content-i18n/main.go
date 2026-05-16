@@ -48,6 +48,10 @@ func main() {
 		runReview(args)
 	case "repair-plan":
 		runRepairPlan(args)
+	case "next":
+		runNext(args)
+	case "batch-status":
+		runBatchStatus(args)
 	case "help":
 		printUsage()
 	default:
@@ -63,7 +67,7 @@ func parseCommand(args []string) (string, []string) {
 	}
 
 	for i, arg := range args {
-		if arg == "status" || arg == "list" || arg == "plan" || arg == "apply-work" || arg == "validate-content" || arg == "validate-site" || arg == "mcp" || arg == "prepare" || arg == "review" || arg == "repair-plan" || arg == "help" {
+		if arg == "status" || arg == "list" || arg == "plan" || arg == "apply-work" || arg == "validate-content" || arg == "validate-site" || arg == "mcp" || arg == "prepare" || arg == "review" || arg == "repair-plan" || arg == "next" || arg == "batch-status" || arg == "help" {
 			rest := append([]string{}, args[:i]...)
 			rest = append(rest, args[i+1:]...)
 			return arg, rest
@@ -74,7 +78,7 @@ func parseCommand(args []string) (string, []string) {
 }
 
 func printUsage() {
-	fmt.Println("usage: content-i18n [--config path] <status|list|plan|apply-work|validate-content|validate-site|prepare|review|repair-plan|mcp>")
+	fmt.Println("usage: content-i18n [--config path] <status|list|plan|apply-work|validate-content|validate-site|prepare|review|repair-plan|next|batch-status|mcp>")
 }
 
 func loadConfig(configPath string) (*config.Config, error) {
@@ -365,5 +369,52 @@ func runRepairPlan(args []string) {
 			fmt.Printf("  [%s] [%s] %s: %s\n", issue.Severity, issue.Field, issue.Section, issue.Message)
 		}
 		os.Exit(1)
+	}
+}
+
+func runNext(args []string) {
+	flags := flag.NewFlagSet("next", flag.ExitOnError)
+	configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
+	group := flags.String("group", "", "filter by group name (e.g. DevOps)")
+	flags.Parse(args)
+
+	cfg, err := loadConfig(*configPath)
+	exitOnError(err)
+
+	entry, err := core.NextTranslation(cfg, *group)
+	exitOnError(err)
+
+	if entry == nil {
+		fmt.Println("queue empty")
+		return
+	}
+
+	fmt.Printf("source: %s\n", entry.SourcePath)
+	fmt.Printf("target: %s\n", entry.TargetPath)
+	fmt.Printf("language: %s\n", entry.Language)
+	fmt.Printf("status: %s\n", entry.Status)
+	fmt.Printf("source_hash: %s\n", entry.SourceHash)
+}
+
+func runBatchStatus(args []string) {
+	flags := flag.NewFlagSet("batch-status", flag.ExitOnError)
+	configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
+	group := flags.String("group", "", "filter by group name (e.g. DevOps)")
+	flags.Parse(args)
+
+	cfg, err := loadConfig(*configPath)
+	exitOnError(err)
+
+	status, err := core.TranslationQueue(cfg, *group)
+	exitOnError(err)
+
+	fmt.Printf("total: %d\n", status.Total)
+	fmt.Printf("completed: %d\n", status.Completed)
+	fmt.Printf("stale: %d\n", status.Stale)
+	fmt.Printf("missing: %d\n", status.Missing)
+	if status.Next != nil {
+		fmt.Printf("next: %s [%s]\n", status.Next.SourcePath, status.Next.Language)
+	} else {
+		fmt.Println("next: none")
 	}
 }

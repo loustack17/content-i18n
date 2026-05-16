@@ -134,6 +134,20 @@ func (s *Server) registerTools() {
 			mcp.Description("Repaired translated markdown content"),
 		),
 	), s.handleRepairTranslation)
+
+	s.mcp.AddTool(mcp.NewTool("content_i18n_next_translation",
+		mcp.WithDescription("Get the next file in the translation queue. Skips completed files, re-queues stale files when source changes. Deterministic ordering by source path."),
+		mcp.WithString("group",
+			mcp.Description("Optional group filter (e.g. DevOps)"),
+		),
+	), s.handleNextTranslation)
+
+	s.mcp.AddTool(mcp.NewTool("content_i18n_translation_queue",
+		mcp.WithDescription("Get the full translation queue status: total, completed, stale, missing, and next candidate. Supports group filtering."),
+		mcp.WithString("group",
+			mcp.Description("Optional group filter (e.g. DevOps)"),
+		),
+	), s.handleTranslationQueue)
 }
 
 func (s *Server) handleStatus(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -578,4 +592,54 @@ func (s *Server) handleRepairTranslation(ctx context.Context, req mcp.CallToolRe
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("REPAIR OK\nwrote %d bytes to %s", len(content), targetPath)), nil
+}
+
+func (s *Server) handleNextTranslation(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	group := req.GetString("group", "")
+
+	entry, err := core.NextTranslation(s.cfg, group)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	if entry == nil {
+		return mcp.NewToolResultText("queue empty"), nil
+	}
+
+	out, _ := json.MarshalIndent(map[string]any{
+		"source":      entry.SourcePath,
+		"target":      entry.TargetPath,
+		"language":    entry.Language,
+		"status":      string(entry.Status),
+		"source_hash": entry.SourceHash,
+	}, "", "  ")
+	return mcp.NewToolResultText(string(out)), nil
+}
+
+func (s *Server) handleTranslationQueue(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	group := req.GetString("group", "")
+
+	status, err := core.TranslationQueue(s.cfg, group)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	var next any
+	if status.Next != nil {
+		next = map[string]any{
+			"source":   status.Next.SourcePath,
+			"target":   status.Next.TargetPath,
+			"language": status.Next.Language,
+			"status":   string(status.Next.Status),
+		}
+	}
+
+	out, _ := json.MarshalIndent(map[string]any{
+		"total":     status.Total,
+		"completed": status.Completed,
+		"stale":     status.Stale,
+		"missing":   status.Missing,
+		"next":      next,
+	}, "", "  ")
+	return mcp.NewToolResultText(string(out)), nil
 }
