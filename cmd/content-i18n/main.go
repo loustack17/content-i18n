@@ -42,6 +42,12 @@ func main() {
 		configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
 		flags.Parse(args)
 		runMCP(*configPath)
+	case "prepare":
+		runPrepare(args)
+	case "review":
+		runReview(args)
+	case "repair-plan":
+		runRepairPlan(args)
 	case "help":
 		printUsage()
 	default:
@@ -57,7 +63,7 @@ func parseCommand(args []string) (string, []string) {
 	}
 
 	for i, arg := range args {
-		if arg == "status" || arg == "list" || arg == "plan" || arg == "apply-work" || arg == "validate-content" || arg == "validate-site" || arg == "mcp" || arg == "help" {
+		if arg == "status" || arg == "list" || arg == "plan" || arg == "apply-work" || arg == "validate-content" || arg == "validate-site" || arg == "mcp" || arg == "prepare" || arg == "review" || arg == "repair-plan" || arg == "help" {
 			rest := append([]string{}, args[:i]...)
 			rest = append(rest, args[i+1:]...)
 			return arg, rest
@@ -68,7 +74,7 @@ func parseCommand(args []string) (string, []string) {
 }
 
 func printUsage() {
-	fmt.Println("usage: content-i18n [--config path] <status|list|plan|apply-work|validate-content|validate-site|mcp>")
+	fmt.Println("usage: content-i18n [--config path] <status|list|plan|apply-work|validate-content|validate-site|prepare|review|repair-plan|mcp>")
 }
 
 func loadConfig(configPath string) (*config.Config, error) {
@@ -255,6 +261,109 @@ func runMCP(configPath string) {
 func exitOnError(err error) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runPrepare(args []string) {
+	flags := flag.NewFlagSet("prepare", flag.ExitOnError)
+	configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
+	file := flags.String("file", "", "source file to prepare for translation")
+	to := flags.String("to", "", "target language")
+	flags.Parse(args)
+
+	if *file == "" || *to == "" {
+		fmt.Fprintln(os.Stderr, "usage: content-i18n prepare --file <source.md> --to <lang>")
+		os.Exit(2)
+	}
+
+	cfg, err := loadConfig(*configPath)
+	exitOnError(err)
+
+	absFile, err := filepath.Abs(*file)
+	exitOnError(err)
+
+	result, err := core.TranslatePrepare(cfg, absFile, *to)
+	exitOnError(err)
+
+	fmt.Printf("slug: %s\n", result.Slug)
+	fmt.Printf("target_path: %s\n", result.TargetPath)
+	fmt.Printf("\n--- source ---\n%s\n", result.Source)
+	if result.Prompt != "" {
+		fmt.Printf("\n--- prompt ---\n%s\n", result.Prompt)
+	}
+	if result.Glossary != "" {
+		fmt.Printf("\n--- glossary ---\n%s\n", result.Glossary)
+	}
+	if result.Style != "" {
+		fmt.Printf("\n--- style ---\n%s\n", result.Style)
+	}
+	if result.Context != "" {
+		fmt.Printf("\n--- context ---\n%s\n", result.Context)
+	}
+}
+
+func runReview(args []string) {
+	flags := flag.NewFlagSet("review", flag.ExitOnError)
+	configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
+	file := flags.String("file", "", "target file to review")
+	source := flags.String("source", "", "source file for comparison")
+	flags.Parse(args)
+
+	if *file == "" || *source == "" {
+		fmt.Fprintln(os.Stderr, "usage: content-i18n review --file <target.md> --source <source.md>")
+		os.Exit(2)
+	}
+
+	cfg, err := loadConfig(*configPath)
+	exitOnError(err)
+
+	result, err := core.TranslateReview(cfg, *source, *file)
+	exitOnError(err)
+
+	fmt.Printf("source_words: %d\n", result.SourceWords)
+	fmt.Printf("target_words: %d\n", result.TargetWords)
+	fmt.Printf("word_ratio: %s\n", result.WordRatio)
+	fmt.Printf("passed: %v\n", result.Passed)
+
+	if len(result.Issues) > 0 {
+		fmt.Println("\nissues:")
+		for _, issue := range result.Issues {
+			fmt.Printf("  [%s] [%s] %s: %s (fix: %s)\n", issue.Severity, issue.Field, issue.Section, issue.Message, issue.SuggestedFix)
+		}
+	}
+
+	if !result.Passed {
+		os.Exit(1)
+	}
+}
+
+func runRepairPlan(args []string) {
+	flags := flag.NewFlagSet("repair-plan", flag.ExitOnError)
+	configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
+	file := flags.String("file", "", "target file with repaired content")
+	source := flags.String("source", "", "source file for comparison")
+	flags.Parse(args)
+
+	if *file == "" || *source == "" {
+		fmt.Fprintln(os.Stderr, "usage: content-i18n repair-plan --file <target.md> --source <source.md>")
+		os.Exit(2)
+	}
+
+	cfg, err := loadConfig(*configPath)
+	exitOnError(err)
+
+	result, err := core.TranslateReview(cfg, *source, *file)
+	exitOnError(err)
+
+	if result.Passed {
+		fmt.Println("REPAIR OK")
+		fmt.Printf("source_words: %d, target_words: %d, ratio: %s\n", result.SourceWords, result.TargetWords, result.WordRatio)
+	} else {
+		fmt.Println("REPAIR FAILED")
+		for _, issue := range result.Issues {
+			fmt.Printf("  [%s] [%s] %s: %s\n", issue.Severity, issue.Field, issue.Section, issue.Message)
+		}
 		os.Exit(1)
 	}
 }
