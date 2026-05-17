@@ -1,16 +1,15 @@
 package core
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/loustack17/content-i18n/internal/config"
 	"github.com/loustack17/content-i18n/internal/content"
+	"github.com/loustack17/content-i18n/internal/structure"
 )
 
 type WorkPacket struct {
@@ -25,13 +24,13 @@ type WorkPacket struct {
 }
 
 type WorkMeta struct {
-	SourcePath     string               `json:"source_path"`
-	TargetLanguage string               `json:"target_language"`
-	Provider       string               `json:"provider,omitempty"`
-	StructureHash  string               `json:"structure_hash"`
-	Fingerprint    StructureFingerprint `json:"fingerprint"`
-	Headings       []string             `json:"headings"`
-	URLs           []string             `json:"urls"`
+	SourcePath     string                         `json:"source_path"`
+	TargetLanguage string                         `json:"target_language"`
+	Provider       string                         `json:"provider,omitempty"`
+	StructureHash  string                         `json:"structure_hash"`
+	Fingerprint    structure.StructureFingerprint `json:"fingerprint"`
+	Headings       []string                       `json:"headings"`
+	URLs           []string                       `json:"urls"`
 }
 
 func SlugFromPath(sourcePath string, sourceRoot string) string {
@@ -110,9 +109,9 @@ func GenerateWorkPacket(cfg *config.Config, sourceFile string, targetLang string
 	}
 
 	sourceText := string(sourceData)
-	fp := computeFingerprint(sourceText)
-	headings := extractMarkdownHeadings(sourceText)
-	urls := uniqueStrings(content.URLPattern.FindAllString(sourceText, -1))
+	fp := structure.ComputeFingerprint(sourceText)
+	headings := structure.ExtractHeadings(sourceText)
+	urls := structure.UniqueStrings(content.URLPattern.FindAllString(sourceText, -1))
 	meta := WorkMeta{
 		SourcePath:     sourceFile,
 		TargetLanguage: targetLang,
@@ -145,115 +144,6 @@ func GenerateWorkPacket(cfg *config.Config, sourceFile string, targetLang string
 		ContextPath:  filepath.Join(workDir, "context.md"),
 		MetaPath:     filepath.Join(workDir, "meta.json"),
 	}, nil
-}
-
-type StructureFingerprint struct {
-	HeadingCount       int `json:"heading_count"`
-	H2Count            int `json:"h2_count"`
-	H3Count            int `json:"h3_count"`
-	H4Count            int `json:"h4_count"`
-	OrderedListCount   int `json:"ordered_list_count"`
-	UnorderedListCount int `json:"unordered_list_count"`
-	TableCount         int `json:"table_count"`
-	ParagraphCount     int `json:"paragraph_count"`
-	BlockquoteCount    int `json:"blockquote_count"`
-	CodeBlockCount     int `json:"code_block_count"`
-}
-
-type FingerprintResult struct {
-	Fingerprint StructureFingerprint
-	Hash        string
-}
-
-var (
-	h2Re      = regexp.MustCompile(`(?m)^## `)
-	h3Re      = regexp.MustCompile(`(?m)^### `)
-	h4Re      = regexp.MustCompile(`(?m)^#### `)
-	olRe      = regexp.MustCompile(`(?m)^\d+\.\s`)
-	ulRe      = regexp.MustCompile(`(?m)^[-*+]\s`)
-	tableRe   = regexp.MustCompile(`(?m)^\|`)
-	bqRe      = regexp.MustCompile(`(?m)^> `)
-	fenceRe   = regexp.MustCompile("(?m)^```")
-	headingRe = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
-)
-
-func countParagraphs(body string) int {
-	lines := strings.Split(body, "\n")
-	count := 0
-	inBlock := false
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			if inBlock {
-				count++
-				inBlock = false
-			}
-			continue
-		}
-		if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "|") || strings.HasPrefix(trimmed, ">") {
-			if inBlock {
-				count++
-				inBlock = false
-			}
-			continue
-		}
-		inBlock = true
-	}
-	if inBlock {
-		count++
-	}
-	return count
-}
-
-func computeFingerprint(markdown string) FingerprintResult {
-	body := markdown
-	if idx := strings.Index(markdown, "---\n"); idx >= 0 {
-		rest := markdown[idx+4:]
-		if endIdx := strings.Index(rest, "\n---\n"); endIdx >= 0 {
-			body = rest[endIdx+5:]
-		}
-	}
-
-	fp := StructureFingerprint{
-		HeadingCount:       len(h2Re.FindAllString(markdown, -1)) + len(h3Re.FindAllString(markdown, -1)) + len(h4Re.FindAllString(markdown, -1)),
-		H2Count:            len(h2Re.FindAllString(markdown, -1)),
-		H3Count:            len(h3Re.FindAllString(markdown, -1)),
-		H4Count:            len(h4Re.FindAllString(markdown, -1)),
-		OrderedListCount:   len(olRe.FindAllString(body, -1)),
-		UnorderedListCount: len(ulRe.FindAllString(body, -1)),
-		TableCount:         len(tableRe.FindAllString(body, -1)),
-		ParagraphCount:     countParagraphs(body),
-		BlockquoteCount:    len(bqRe.FindAllString(body, -1)),
-		CodeBlockCount:     len(fenceRe.FindAllString(markdown, -1)) / 2,
-	}
-
-	data, _ := json.Marshal(fp)
-	h := sha256.Sum256(data)
-	return FingerprintResult{Fingerprint: fp, Hash: fmt.Sprintf("%x", h[:8])}
-}
-
-func extractMarkdownHeadings(markdown string) []string {
-	matches := headingRe.FindAllStringSubmatch(markdown, -1)
-	out := make([]string, 0, len(matches))
-	for _, m := range matches {
-		if len(m) >= 3 {
-			out = append(out, strings.TrimSpace(m[1]+" "+m[2]))
-		}
-	}
-	return out
-}
-
-func uniqueStrings(items []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(items))
-	for _, item := range items {
-		if seen[item] {
-			continue
-		}
-		seen[item] = true
-		out = append(out, item)
-	}
-	return out
 }
 
 func buildHarnessContext(meta WorkMeta) string {

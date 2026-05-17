@@ -9,6 +9,7 @@ import (
 
 	"github.com/loustack17/content-i18n/internal/content"
 	"github.com/loustack17/content-i18n/internal/frontmatter"
+	"github.com/loustack17/content-i18n/internal/structure"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,23 +25,7 @@ type ToneCheckOptions struct {
 	HeadingDocLikePrefixes  []string
 }
 
-var (
-	vH2Re    = regexp.MustCompile(`(?m)^## `)
-	vH3Re    = regexp.MustCompile(`(?m)^### `)
-	vH4Re    = regexp.MustCompile(`(?m)^#### `)
-	vOLRe    = regexp.MustCompile(`(?m)^\d+\.\s`)
-	vULRe    = regexp.MustCompile(`(?m)^[-*+]\s`)
-	vTableRe = regexp.MustCompile(`(?m)^\|`)
-	vBQRe    = regexp.MustCompile(`(?m)^> `)
-	vFenceRe = regexp.MustCompile("(?m)^```")
-)
-
-type Violation struct {
-	Field        string
-	Section      string
-	Message      string
-	SuggestedFix string
-}
+type Violation = structure.Violation
 
 func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Violation, error) {
 	var violations []Violation
@@ -56,7 +41,11 @@ func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Vi
 		violations = append(violations, Violation{Field: "frontmatter", Section: "header", Message: "target missing frontmatter", SuggestedFix: "add YAML frontmatter block"})
 	}
 
-	targetDoc := frontmatter.Split(targetContent)
+	targetDoc, err := frontmatter.Split(targetContent)
+	if err != nil {
+		violations = append(violations, Violation{Field: "frontmatter", Section: "header", Message: fmt.Sprintf("invalid frontmatter: %v", err), SuggestedFix: "fix YAML frontmatter syntax"})
+		return violations, nil
+	}
 
 	if targetDoc.Metadata.Title == "" {
 		violations = append(violations, Violation{Field: "title", Section: "header", Message: "target title missing", SuggestedFix: "add title to frontmatter"})
@@ -111,7 +100,10 @@ func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Vi
 	}
 
 	sourceContent := string(sourceData)
-	sourceDoc := frontmatter.Split(sourceContent)
+	sourceDoc, err := frontmatter.Split(sourceContent)
+	if err != nil {
+		return nil, fmt.Errorf("parse source frontmatter: %w", err)
+	}
 
 	if sourceDoc.Metadata.TranslationKey != "" && targetDoc.Metadata.TranslationKey != sourceDoc.Metadata.TranslationKey {
 		violations = append(violations, Violation{Field: "translationKey", Section: "header", Message: "translationKey mismatch", SuggestedFix: "set matching translationKey"})
@@ -387,33 +379,33 @@ func checkHeadingPhrasing(body string, docLikePrefixes []string) []Violation {
 func checkStructure(source, target string) []Violation {
 	var violations []Violation
 
-	srcBody := extractBody(source)
-	tgtBody := extractBody(target)
+	srcBody := structure.ExtractBody(source)
+	tgtBody := structure.ExtractBody(target)
 
-	srcH2 := len(vH2Re.FindAllString(source, -1))
-	tgtH2 := len(vH2Re.FindAllString(target, -1))
+	srcH2 := len(structure.H2Re.FindAllString(source, -1))
+	tgtH2 := len(structure.H2Re.FindAllString(target, -1))
 	if srcH2 != tgtH2 {
 		violations = append(violations, Violation{Field: "structure", Section: "headings", Message: fmt.Sprintf("target has %d H2 headings, source has %d", tgtH2, srcH2), SuggestedFix: "preserve heading hierarchy from source"})
 	}
 
-	srcH3 := len(vH3Re.FindAllString(source, -1))
-	tgtH3 := len(vH3Re.FindAllString(target, -1))
+	srcH3 := len(structure.H3Re.FindAllString(source, -1))
+	tgtH3 := len(structure.H3Re.FindAllString(target, -1))
 	if srcH3 != tgtH3 {
 		violations = append(violations, Violation{Field: "structure", Section: "headings", Message: fmt.Sprintf("target has %d H3 headings, source has %d", tgtH3, srcH3), SuggestedFix: "preserve heading hierarchy from source"})
 	}
 
-	srcH4 := len(vH4Re.FindAllString(source, -1))
-	tgtH4 := len(vH4Re.FindAllString(target, -1))
+	srcH4 := len(structure.H4Re.FindAllString(source, -1))
+	tgtH4 := len(structure.H4Re.FindAllString(target, -1))
 	if srcH4 != tgtH4 {
 		violations = append(violations, Violation{Field: "structure", Section: "headings", Message: fmt.Sprintf("target has %d H4 headings, source has %d", tgtH4, srcH4), SuggestedFix: "preserve heading hierarchy from source"})
 	}
 
-	srcHeadings := extractHeadings(source)
-	tgtHeadings := extractHeadings(target)
+	srcHeadings := structure.ExtractHeadings(source)
+	tgtHeadings := structure.ExtractHeadings(target)
 	if len(srcHeadings) == len(tgtHeadings) {
 		for i := range srcHeadings {
-			srcNorm := normalizeHeadingText(srcHeadings[i])
-			tgtNorm := normalizeHeadingText(tgtHeadings[i])
+			srcNorm := structure.NormalizeHeadingText(srcHeadings[i])
+			tgtNorm := structure.NormalizeHeadingText(tgtHeadings[i])
 			if srcNorm == tgtNorm {
 				continue
 			}
@@ -436,26 +428,26 @@ func checkStructure(source, target string) []Violation {
 		}
 	}
 
-	srcOL := len(vOLRe.FindAllString(srcBody, -1))
-	tgtOL := len(vOLRe.FindAllString(tgtBody, -1))
+	srcOL := len(structure.OLRe.FindAllString(srcBody, -1))
+	tgtOL := len(structure.OLRe.FindAllString(tgtBody, -1))
 	if srcOL != tgtOL {
 		violations = append(violations, Violation{Field: "structure", Section: "lists", Message: fmt.Sprintf("target has %d ordered list items, source has %d", tgtOL, srcOL), SuggestedFix: "preserve list structure from source"})
 	}
 
-	srcUL := len(vULRe.FindAllString(srcBody, -1))
-	tgtUL := len(vULRe.FindAllString(tgtBody, -1))
+	srcUL := len(structure.ULRe.FindAllString(srcBody, -1))
+	tgtUL := len(structure.ULRe.FindAllString(tgtBody, -1))
 	if srcUL != tgtUL {
 		violations = append(violations, Violation{Field: "structure", Section: "lists", Message: fmt.Sprintf("target has %d unordered list items, source has %d", tgtUL, srcUL), SuggestedFix: "preserve list structure from source"})
 	}
 
-	srcTables := len(vTableRe.FindAllString(srcBody, -1))
-	tgtTables := len(vTableRe.FindAllString(tgtBody, -1))
+	srcTables := len(structure.TableRe.FindAllString(srcBody, -1))
+	tgtTables := len(structure.TableRe.FindAllString(tgtBody, -1))
 	if srcTables != tgtTables {
 		violations = append(violations, Violation{Field: "structure", Section: "tables", Message: fmt.Sprintf("target has %d table rows, source has %d", tgtTables, srcTables), SuggestedFix: "preserve table structure from source"})
 	}
 
-	srcTableCols := countTableColumns(srcBody)
-	tgtTableCols := countTableColumns(tgtBody)
+	srcTableCols := structure.CountTableColumns(srcBody)
+	tgtTableCols := structure.CountTableColumns(tgtBody)
 	if len(srcTableCols) == len(tgtTableCols) {
 		for i := range srcTableCols {
 			if srcTableCols[i] != tgtTableCols[i] {
@@ -465,144 +457,25 @@ func checkStructure(source, target string) []Violation {
 		}
 	}
 
-	srcBQ := len(vBQRe.FindAllString(srcBody, -1))
-	tgtBQ := len(vBQRe.FindAllString(tgtBody, -1))
+	srcBQ := len(structure.BQRe.FindAllString(srcBody, -1))
+	tgtBQ := len(structure.BQRe.FindAllString(tgtBody, -1))
 	if srcBQ != tgtBQ {
 		violations = append(violations, Violation{Field: "structure", Section: "blockquotes", Message: fmt.Sprintf("target has %d blockquotes, source has %d", tgtBQ, srcBQ), SuggestedFix: "preserve blockquote structure from source"})
 	}
 
-	srcFences := len(vFenceRe.FindAllString(source, -1)) / 2
-	tgtFences := len(vFenceRe.FindAllString(target, -1)) / 2
+	srcFences := len(structure.FenceRe.FindAllString(source, -1)) / 2
+	tgtFences := len(structure.FenceRe.FindAllString(target, -1)) / 2
 	if srcFences != tgtFences {
 		violations = append(violations, Violation{Field: "structure", Section: "code", Message: fmt.Sprintf("target has %d fenced code blocks, source has %d", tgtFences, srcFences), SuggestedFix: "preserve all code blocks from source"})
 	}
 
-	srcParas := countParagraphs(srcBody)
-	tgtParas := countParagraphs(tgtBody)
+	srcParas := structure.CountParagraphs(srcBody)
+	tgtParas := structure.CountParagraphs(tgtBody)
 	if srcParas != tgtParas {
 		violations = append(violations, Violation{Field: "structure", Section: "paragraphs", Message: fmt.Sprintf("target has %d paragraphs, source has %d", tgtParas, srcParas), SuggestedFix: "preserve paragraph count from source; do not merge or split paragraphs"})
 	}
 
-	violations = append(violations, checkOmission(srcBody, tgtBody)...)
+	violations = append(violations, structure.CheckOmission(srcBody, tgtBody)...)
 
 	return violations
-}
-
-var vHeadingRe = regexp.MustCompile(`(?m)^(#{1,6})\s+(.*)`)
-
-func extractHeadings(markdown string) []string {
-	matches := vHeadingRe.FindAllStringSubmatch(markdown, -1)
-	result := make([]string, 0, len(matches))
-	for _, m := range matches {
-		if len(m) >= 2 {
-			result = append(result, strings.TrimSpace(m[1]+" "+m[2]))
-		}
-	}
-	return result
-}
-
-func normalizeHeadingText(heading string) string {
-	parts := strings.SplitN(heading, " ", 2)
-	if len(parts) < 2 {
-		return heading
-	}
-	return strings.ToLower(strings.TrimSpace(parts[1]))
-}
-
-func countTableColumns(body string) []int {
-	var cols []int
-	var currentTableLines []string
-	inTable := false
-
-	lines := strings.Split(body, "\n")
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "|") {
-			if !inTable {
-				currentTableLines = []string{}
-				inTable = true
-			}
-			currentTableLines = append(currentTableLines, trimmed)
-		} else {
-			if inTable && len(currentTableLines) > 0 {
-				firstRow := currentTableLines[0]
-				if firstRow == "|---|" || !strings.Contains(firstRow, "---") {
-					cellCount := strings.Count(firstRow, "|") - 1
-					if cellCount > 0 {
-						cols = append(cols, cellCount)
-					}
-				}
-			}
-			inTable = false
-			currentTableLines = nil
-		}
-	}
-	if inTable && len(currentTableLines) > 0 {
-		firstRow := currentTableLines[0]
-		if firstRow == "|---|" || !strings.Contains(firstRow, "---") {
-			cellCount := strings.Count(firstRow, "|") - 1
-			if cellCount > 0 {
-				cols = append(cols, cellCount)
-			}
-		}
-	}
-	return cols
-}
-
-func checkOmission(srcBody, tgtBody string) []Violation {
-	srcWords := len(strings.Fields(srcBody))
-	tgtWords := len(strings.Fields(tgtBody))
-	if srcWords == 0 {
-		return nil
-	}
-	ratio := float64(tgtWords) / float64(srcWords)
-	if ratio < 0.5 {
-		return []Violation{{
-			Field:        "omission",
-			Section:      "body",
-			Message:      fmt.Sprintf("target has %d%% of source word count (%d vs %d words)", int(ratio*100), tgtWords, srcWords),
-			SuggestedFix: "check for missing sections, examples, or explanatory text",
-		}}
-	}
-	return nil
-}
-
-func countParagraphs(body string) int {
-	lines := strings.Split(body, "\n")
-	count := 0
-	inBlock := false
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			if inBlock {
-				count++
-				inBlock = false
-			}
-			continue
-		}
-		if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "|") || strings.HasPrefix(trimmed, ">") {
-			if inBlock {
-				count++
-				inBlock = false
-			}
-			continue
-		}
-		inBlock = true
-	}
-	if inBlock {
-		count++
-	}
-	return count
-}
-
-func extractBody(markdown string) string {
-	if !strings.HasPrefix(markdown, "---\n") {
-		return markdown
-	}
-	rest := strings.TrimPrefix(markdown, "---\n")
-	parts := strings.SplitN(rest, "\n---\n", 2)
-	if len(parts) != 2 {
-		return markdown
-	}
-	return parts[1]
 }

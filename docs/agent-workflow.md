@@ -20,11 +20,17 @@ That's it. No large custom operator prompt. The tool carries everything the agen
 
 | Step | Tool | Purpose |
 |------|------|---------|
-| 1 | `content_i18n_prepare_translation` | Get source, prompt, glossary, style, context, fingerprint |
+| 1 | `content_i18n_prepare_translation` | Get source, prompt, glossary, style, context, fingerprint, target_path |
 | 2 | (agent translates) | Use returned context to produce fidelity-first translation |
 | 3 | `content_i18n_review_translation` | Validate against source structure and content |
-| 4 | `content_i18n_repair_translation` | Write repaired translation (validates before writing) |
-| 5 | Repeat 3-4 until review passes | Iterative repair loop |
+| 4 | Repeat 3 until review passes | Iterative repair loop |
+| 5 | `content_i18n_sync_status` | Mark direct-target translation complete (optional) |
+
+For batch workflows:
+| Step | Tool | Purpose |
+|------|------|---------|
+| 1 | `content_i18n_translation_queue` | See queue status and next candidate |
+| 2 | `content_i18n_translate_batch` | Full orchestration: prepare → translate → review → validate → sync |
 
 ### CLI
 
@@ -70,6 +76,7 @@ A single `content_i18n_prepare_translation` call returns:
 A single `content_i18n_review_translation` call returns:
 
 - `passed` — boolean
+- `ready_to_sync` — true when passed=true AND no error-severity issues (structure/code/URL intact). When true, call `content_i18n_sync_status` to mark complete.
 - `source_words` / `target_words` / `word_ratio` — coverage check
 - `issues[]` — array of:
   - `severity` — "error" (structure/code/URL) or "warning" (tone/style)
@@ -77,13 +84,6 @@ A single `content_i18n_review_translation` call returns:
   - `section` — where in the document
   - `message` — what went wrong
   - `suggested_fix` — how to fix it
-
-## What repair returns
-
-A single `content_i18n_repair_translation` call returns:
-
-- `REPAIR OK` — content passed validation, written to target
-- `REPAIR FAILED` — list of issues, content not written
 
 ## Fidelity-first, not editorial rewriting
 
@@ -109,3 +109,66 @@ Once `prepare` is called, the work packet directory contains:
 - `target.md` — translation output (agent writes here)
 
 The agent needs no external context beyond the work packet to complete the translation.
+
+## Batch translation orchestration
+
+For translating many files without manual per-file looping, use `translate-batch` (CLI) or `content_i18n_translate_batch` (MCP).
+
+### When to use batch vs manual flow
+
+| Scenario | Approach |
+|----------|----------|
+| Single file or small edits | Manual prepare → review → repair → apply |
+| Many files, DeepL/Google provider | `translate-batch --provider deepl` (fully autonomous) |
+| Many files, AI agent workflow | `translate-batch --provider ai-harness` (processes pre-filled targets) |
+| Need control over error handling | `--stop-on-fail` or `--continue-on-error` |
+| Want to preview before running | `--dry-run` |
+
+### Batch pipeline
+
+For each queued file:
+
+1. **Prepare** — generate work packet with source, prompt, glossary, style, context, fingerprint
+2. **Translate** — call provider API (DeepL/Google) or check for pre-filled target (ai-harness)
+3. **Review** — validate against source using `TranslateReview` (config-driven glossary/tone/style checks)
+4. **Repair** — if review fails and `--continue-on-error`, attempt repair
+5. **Validate** — CJK character check on target body
+6. **Sync-status** — update official status store only if all checks pass
+
+### Provider modes
+
+- **`deepl` / `google`**: Calls provider API to translate body text, writes target with full frontmatter preserved (all source fields + provider metadata), reviews, validates, syncs.
+- **`ai-harness`**: Prepares work packets, then reviews/validates/syncs pre-filled `target.md` files. Does not call AI — the agent must write targets externally first. Reports unfilled targets as "pending".
+- **`auto`**: Tries DeepL first, falls back to Google.
+
+### Success guarantees
+
+Batch never marks a file complete unless:
+- `validate-content --source` passes (structure, code, URLs, glossary, tone)
+- CJK character check is clean (no source-language characters in target)
+- `sync-status` succeeds (path validation, status store update)
+
+### MCP batch tool
+
+```json
+{
+  "tool": "content_i18n_translate_batch",
+  "arguments": {
+    "provider": "deepl",
+    "group": "DevOps",
+    "limit": 10,
+    "stop_on_fail": false,
+    "continue_on_error": true
+  }
+}
+```
+
+Returns:
+```json
+{
+  "total": 15,
+  "completed": [{"source_path": "...", "target_path": "...", "language": "en", "status": "completed"}],
+  "failed": [{"source_path": "...", "language": "en", "status": "failed", "error": "..."}],
+  "remaining": [{"source_path": "...", "language": "en", "status": "remaining"}]
+}
+```

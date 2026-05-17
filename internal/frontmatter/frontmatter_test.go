@@ -6,7 +6,10 @@ import (
 )
 
 func TestSplitNoFrontmatter(t *testing.T) {
-	doc := Split("# Hello\n\nContent here")
+	doc, err := Split("# Hello\n\nContent here")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if doc.Frontmatter != "" {
 		t.Fatalf("expected empty frontmatter, got %q", doc.Frontmatter)
 	}
@@ -17,7 +20,10 @@ func TestSplitNoFrontmatter(t *testing.T) {
 
 func TestSplitWithFrontmatter(t *testing.T) {
 	input := "---\ntitle: Test\ndraft: true\n---\n# Hello"
-	doc := Split(input)
+	doc, err := Split(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if doc.Metadata.Title != "Test" {
 		t.Fatalf("expected title=Test, got %q", doc.Metadata.Title)
 	}
@@ -29,8 +35,16 @@ func TestSplitWithFrontmatter(t *testing.T) {
 	}
 }
 
+func TestSplitMalformedFrontmatter(t *testing.T) {
+	input := "---\ntitle: [invalid yaml\n---\n# Hello"
+	_, err := Split(input)
+	if err == nil {
+		t.Fatal("expected error for malformed frontmatter")
+	}
+}
+
 func TestInjectProviderMeta(t *testing.T) {
-	doc := Split("---\ntitle: Test\n---\n# Hello")
+	doc, _ := Split("---\ntitle: Test\n---\n# Hello")
 
 	pm := ProviderMeta{
 		Provider: "google",
@@ -39,7 +53,10 @@ func TestInjectProviderMeta(t *testing.T) {
 		Draft:    true,
 	}
 
-	result := InjectProviderMeta(doc, pm)
+	result, err := InjectProviderMeta(doc, pm)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if !strings.Contains(result, "translation_provider: google") {
 		t.Fatalf("expected translation_provider in output: %s", result)
@@ -56,7 +73,7 @@ func TestInjectProviderMeta(t *testing.T) {
 }
 
 func TestInjectProviderMetaPreservesBody(t *testing.T) {
-	doc := Split("---\ntitle: Test\n---\n# Hello\n\nContent here")
+	doc, _ := Split("---\ntitle: Test\n---\n# Hello\n\nContent here")
 
 	pm := ProviderMeta{
 		Provider: "deepl",
@@ -65,7 +82,10 @@ func TestInjectProviderMetaPreservesBody(t *testing.T) {
 		Draft:    true,
 	}
 
-	result := InjectProviderMeta(doc, pm)
+	result, err := InjectProviderMeta(doc, pm)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if !strings.HasSuffix(result, "# Hello\n\nContent here") {
 		t.Fatalf("expected body preserved, got: %s", result)
@@ -82,7 +102,7 @@ tags:
 draft: true
 ---
 # Hello`
-	doc := Split(input)
+	doc, _ := Split(input)
 
 	pm := ProviderMeta{
 		Provider: "google",
@@ -91,7 +111,10 @@ draft: true
 		Draft:    true,
 	}
 
-	result := InjectProviderMeta(doc, pm)
+	result, err := InjectProviderMeta(doc, pm)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if !strings.Contains(result, "date:") {
 		t.Fatalf("expected 'date:' preserved, got: %s", result)

@@ -22,6 +22,7 @@ content-i18n review --config content-i18n.yaml --file <target.md> --source <sour
 content-i18n repair-plan --config content-i18n.yaml --file <target.md> --source <source.md>
 content-i18n next --config content-i18n.yaml [--group DevOps]
 content-i18n batch-status --config content-i18n.yaml [--group DevOps]
+content-i18n translate-batch --config content-i18n.yaml --provider deepl [--group DevOps] [--limit 10] [--stop-on-fail] [--continue-on-error] [--dry-run]
 content-i18n apply-work --config content-i18n.yaml --slug <slug> [--dry-run] [--force]
 content-i18n validate-content --config content-i18n.yaml --file <target.md> [--source <source.md>]
 content-i18n validate-site --config content-i18n.yaml
@@ -39,13 +40,13 @@ It also provides deterministic batch queue control so agents can keep moving fil
 
 ### MCP workflow (preferred)
 
-1. Call `content_i18n_prepare_translation(source, language)` — returns source, prompt, glossary, style, context, fingerprint
+1. Call `content_i18n_prepare_translation(source, language)` — returns source, prompt, glossary, style, context, fingerprint, target_path
 2. Translate using the returned context
-3. Call `content_i18n_review_translation(source, target)` — returns pass/fail, word ratio, severity-tagged issues
-4. If review fails, fix issues and call `content_i18n_repair_translation(slug, content)` — validates before writing
-5. Repeat review until pass
-6. Use `content_i18n_next_translation` / `content_i18n_translation_queue` for deterministic batch progression when translating many files
-7. Call `content_i18n_apply_work` or write directly to target path
+3. Call `content_i18n_review_translation(source, target)` — returns passed, ready_to_sync, word ratio, severity-tagged issues
+4. Fix issues and re-review until pass
+5. Use `content_i18n_translation_queue` for deterministic batch progression (includes next candidate)
+6. Call `content_i18n_translate_batch` for full orchestration, or `content_i18n_sync_status` for direct-target workflows
+7. Write to target path or use CLI `apply-work`
 
 ### CLI workflow
 
@@ -68,6 +69,41 @@ content-i18n batch-status --group DevOps
 # Step 6: apply when review passes
 content-i18n apply-work --slug <slug>
 ```
+
+### Batch translation (one-command orchestration)
+
+For translating many files without manual per-file looping:
+
+```bash
+# DeepL/Google: autonomous — translate via API, review, validate, sync
+content-i18n translate-batch --provider deepl --group DevOps
+
+# AI harness: batch review/sync of pre-filled targets (agent writes target.md first)
+content-i18n translate-batch --provider ai-harness --group DevOps
+
+# Dry run: see what would be processed
+content-i18n translate-batch --provider deepl --dry-run
+
+# Stop on first failure
+content-i18n translate-batch --provider deepl --stop-on-fail
+
+# Continue processing after failures
+content-i18n translate-batch --provider deepl --continue-on-error
+
+# Limit to N files
+content-i18n translate-batch --provider deepl --limit 5
+```
+
+Batch pipeline per file: prepare → translate (provider API or pre-filled target) → review → repair (if --continue-on-error) → validate → CJK check → sync-status.
+
+Never marks complete unless validate-content passes, CJK is clean, and sync-status succeeds.
+
+Provider modes:
+- **deepl/google**: Calls provider API to translate, writes target with full frontmatter preserved, reviews, validates, syncs.
+- **ai-harness**: Prepares work packets, reviews/validates/syncs pre-filled `target.md` files. Reports unfilled targets as "pending". Does not call AI — agent writes targets externally first.
+- **auto**: Tries DeepL first, falls back to Google.
+
+MCP equivalent: `content_i18n_translate_batch(provider="deepl", group="DevOps")`
 
 ## Fidelity-first contract
 

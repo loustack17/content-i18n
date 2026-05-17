@@ -8,17 +8,18 @@ import (
 	"strings"
 
 	"github.com/loustack17/content-i18n/internal/config"
+	"github.com/loustack17/content-i18n/internal/structure"
 )
 
 type PrepareResult struct {
-	Slug        string               `json:"slug"`
-	Source      string               `json:"source"`
-	Prompt      string               `json:"prompt"`
-	Glossary    string               `json:"glossary"`
-	Style       string               `json:"style"`
-	Context     string               `json:"context"`
-	Fingerprint StructureFingerprint `json:"fingerprint"`
-	TargetPath  string               `json:"target_path"`
+	Slug        string                         `json:"slug"`
+	Source      string                         `json:"source"`
+	Prompt      string                         `json:"prompt"`
+	Glossary    string                         `json:"glossary"`
+	Style       string                         `json:"style"`
+	Context     string                         `json:"context"`
+	Fingerprint structure.StructureFingerprint `json:"fingerprint"`
+	TargetPath  string                         `json:"target_path"`
 }
 
 func TranslatePrepare(cfg *config.Config, sourceFile string, targetLang string) (*PrepareResult, error) {
@@ -83,6 +84,7 @@ type ReviewIssue struct {
 
 type ReviewResult struct {
 	Passed      bool          `json:"passed"`
+	ReadyToSync bool          `json:"ready_to_sync"`
 	SourceWords int           `json:"source_words"`
 	TargetWords int           `json:"target_words"`
 	WordRatio   string        `json:"word_ratio"`
@@ -133,8 +135,17 @@ func TranslateReview(cfg *config.Config, sourceFile string, targetFile string) (
 		ratio = fmt.Sprintf("%.0f%%", float64(tgtWords)/float64(srcWords)*100)
 	}
 
+	hasErrors := false
+	for _, iss := range issues {
+		if iss.Severity == "error" {
+			hasErrors = true
+			break
+		}
+	}
+
 	return &ReviewResult{
 		Passed:      result.Passed,
+		ReadyToSync: result.Passed && !hasErrors,
 		SourceWords: srcWords,
 		TargetWords: tgtWords,
 		WordRatio:   ratio,

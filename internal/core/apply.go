@@ -69,13 +69,19 @@ func ApplyWork(cfg *config.Config, slug string, dryRun bool, force bool) error {
 
 	output := targetData
 	if meta.Provider != "" && meta.Provider != "manual" {
-		doc := frontmatter.Split(string(targetData))
-		injected := frontmatter.InjectProviderMeta(doc, frontmatter.ProviderMeta{
+		doc, err := frontmatter.Split(string(targetData))
+		if err != nil {
+			return fmt.Errorf("parse target frontmatter: %w", err)
+		}
+		injected, err := frontmatter.InjectProviderMeta(doc, frontmatter.ProviderMeta{
 			Provider: meta.Provider,
 			Quality:  "machine_draft",
 			Reviewed: false,
 			Draft:    true,
 		})
+		if err != nil {
+			return fmt.Errorf("inject provider metadata: %w", err)
+		}
 		output = []byte(injected)
 	}
 

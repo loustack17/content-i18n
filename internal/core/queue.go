@@ -1,9 +1,6 @@
 package core
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -107,54 +104,4 @@ func matchesGroup(sourcePath string, group string) bool {
 	return strings.Contains(dir, groupLower) ||
 		strings.Contains(parentDir, groupLower) ||
 		strings.Contains(sourceLower, groupLower)
-}
-
-type QueueStore struct {
-	Completed map[string]string `json:"completed"`
-}
-
-func queueStorePath(cfg *config.Config) string {
-	return filepath.Join(cfg.ConfigDir, ".content-i18n", "queue.json")
-}
-
-func loadQueueStore(cfg *config.Config) (*QueueStore, error) {
-	path := queueStorePath(cfg)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &QueueStore{Completed: make(map[string]string)}, nil
-		}
-		return nil, err
-	}
-	var store QueueStore
-	if err := json.Unmarshal(data, &store); err != nil {
-		return nil, fmt.Errorf("corrupt queue file: %w", err)
-	}
-	if store.Completed == nil {
-		store.Completed = make(map[string]string)
-	}
-	return &store, nil
-}
-
-func saveQueueStore(cfg *config.Config, store *QueueStore) error {
-	path := queueStorePath(cfg)
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(store, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0644)
-}
-
-func MarkTranslationComplete(cfg *config.Config, sourcePath string, language string, sourceHash string) error {
-	store, err := loadQueueStore(cfg)
-	if err != nil {
-		return err
-	}
-	key := sourcePath + ":" + language
-	store.Completed[key] = sourceHash
-	return saveQueueStore(cfg, store)
 }

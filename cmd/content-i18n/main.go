@@ -52,6 +52,10 @@ func main() {
 		runNext(args)
 	case "batch-status":
 		runBatchStatus(args)
+	case "sync-status":
+		runSyncStatus(args)
+	case "translate-batch":
+		runTranslateBatch(args)
 	case "help":
 		printUsage()
 	default:
@@ -65,7 +69,8 @@ var knownCommands = map[string]bool{
 	"status": true, "list": true, "plan": true, "apply-work": true,
 	"validate-content": true, "validate-site": true, "mcp": true,
 	"prepare": true, "review": true, "repair-plan": true,
-	"next": true, "batch-status": true, "help": true,
+	"next": true, "batch-status": true, "sync-status": true,
+	"translate-batch": true, "help": true,
 }
 
 func parseCommand(args []string) (string, []string) {
@@ -85,7 +90,7 @@ func parseCommand(args []string) (string, []string) {
 }
 
 func printUsage() {
-	fmt.Println("usage: content-i18n [--config path] <status|list|plan|apply-work|validate-content|validate-site|prepare|review|repair-plan|next|batch-status|mcp>")
+	fmt.Println("usage: content-i18n [--config path] <status|list|plan|apply-work|validate-content|validate-site|prepare|review|repair-plan|next|batch-status|sync-status|translate-batch|mcp>")
 }
 
 func loadConfig(configPath string) (*config.Config, error) {
@@ -423,5 +428,76 @@ func runBatchStatus(args []string) {
 		fmt.Printf("next: %s [%s]\n", status.Next.SourcePath, status.Next.Language)
 	} else {
 		fmt.Println("next: none")
+	}
+}
+
+func runSyncStatus(args []string) {
+	flags := flag.NewFlagSet("sync-status", flag.ExitOnError)
+	configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
+	file := flags.String("file", "", "target file that was translated")
+	source := flags.String("source", "", "source file for comparison")
+	flags.Parse(args)
+
+	if *file == "" || *source == "" {
+		fmt.Fprintln(os.Stderr, "usage: content-i18n sync-status --file <target.md> --source <source.md>")
+		os.Exit(2)
+	}
+
+	cfg, err := loadConfig(*configPath)
+	exitOnError(err)
+
+	result, err := core.SyncStatus(cfg, *file, *source)
+	exitOnError(err)
+
+	fmt.Printf("source: %s\n", result.SourcePath)
+	fmt.Printf("target: %s\n", result.TargetPath)
+	fmt.Printf("language: %s\n", result.Language)
+	fmt.Printf("source_hash: %s\n", result.SourceHash)
+	fmt.Println("status: synced")
+}
+
+func runTranslateBatch(args []string) {
+	flags := flag.NewFlagSet("translate-batch", flag.ExitOnError)
+	configPath := flags.String("config", "content-i18n.yaml", "path to content-i18n config")
+	group := flags.String("group", "", "filter by group name (e.g. DevOps)")
+	provider := flags.String("provider", "ai-harness", "translation provider: ai-harness, deepl, google, auto")
+	limit := flags.Int("limit", 0, "max files to process (0 = all)")
+	stopOnFail := flags.Bool("stop-on-fail", false, "stop processing on first failure")
+	continueOnError := flags.Bool("continue-on-error", false, "continue processing after failures")
+	dryRun := flags.Bool("dry-run", false, "show plan without executing")
+	flags.Parse(args)
+
+	cfg, err := loadConfig(*configPath)
+	exitOnError(err)
+
+	opts := core.BatchOptions{
+		Group:           *group,
+		Provider:        *provider,
+		Limit:           *limit,
+		StopOnFail:      *stopOnFail,
+		ContinueOnError: *continueOnError,
+		DryRun:          *dryRun,
+	}
+
+	report, err := core.TranslateBatch(cfg, opts)
+	exitOnError(err)
+
+	fmt.Printf("total in queue: %d\n", report.Total)
+	fmt.Printf("completed: %d\n", len(report.Completed))
+	fmt.Printf("failed: %d\n", len(report.Failed))
+	fmt.Printf("remaining: %d\n", len(report.Remaining))
+
+	for _, r := range report.Completed {
+		fmt.Printf("  [ok] %s [%s]\n", filepath.Base(r.SourcePath), r.Language)
+	}
+	for _, r := range report.Failed {
+		fmt.Printf("  [fail] %s [%s]: %s\n", filepath.Base(r.SourcePath), r.Language, r.Error)
+	}
+	for _, r := range report.Remaining {
+		fmt.Printf("  [pending] %s [%s]: %s\n", filepath.Base(r.SourcePath), r.Language, r.Error)
+	}
+
+	if len(report.Failed) > 0 {
+		os.Exit(1)
 	}
 }

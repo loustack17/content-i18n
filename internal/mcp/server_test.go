@@ -149,6 +149,9 @@ Test paragraph.
 	if !strings.Contains(text, `"passed": true`) {
 		t.Fatalf("expected passed=true, got: %s", text)
 	}
+	if !strings.Contains(text, `"ready_to_sync": true`) {
+		t.Fatalf("expected ready_to_sync=true, got: %s", text)
+	}
 }
 
 func TestReviewTranslation_FailsOnStructureMismatch(t *testing.T) {
@@ -200,116 +203,12 @@ draft: true
 	if !strings.Contains(text, `"severity": "error"`) {
 		t.Fatalf("expected error severity, got: %s", text)
 	}
+	if strings.Contains(text, `"ready_to_sync": true`) {
+		t.Fatalf("expected ready_to_sync=false for structure error, got: %s", text)
+	}
 }
 
-func TestRepairTranslation_AcceptsValidContent(t *testing.T) {
-	srv, tmpDir := setupTestServer(t)
-
-	sourcePath := filepath.Join(tmpDir, "src", "test.md")
-	sourceContent := `---
-title: 測試
-source_lang: zh-TW
-target_lang: en
-draft: true
----
-## Heading
-
-Test paragraph.
-`
-	os.WriteFile(sourcePath, []byte(sourceContent), 0644)
-
-	slug := "test-repair-ok"
-	workDir := filepath.Join("work", slug)
-	os.MkdirAll(workDir, 0755)
-
-	metaContent := `{"source_path":"` + sourcePath + `","target_language":"en","provider":"manual","structure_hash":"","fingerprint":{"heading_count":1,"h2_count":1,"h3_count":0,"h4_count":0,"ordered_list_count":0,"unordered_list_count":0,"table_count":0,"paragraph_count":1,"blockquote_count":0,"code_block_count":0}}`
-	os.WriteFile(filepath.Join(workDir, "meta.json"), []byte(metaContent), 0644)
-
-	repairContent := `---
-title: Test
-source_lang: zh-TW
-target_lang: en
-draft: true
----
-## Heading
-
-Test paragraph.
-`
-	req := mcp.CallToolRequest{}
-	req.Params.Arguments = map[string]any{
-		"slug":    slug,
-		"content": repairContent,
-	}
-
-	result, err := srv.handleRepairTranslation(context.Background(), req)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	text := result.Content[0].(mcp.TextContent).Text
-	if !strings.Contains(text, "REPAIR OK") {
-		t.Fatalf("expected REPAIR OK, got: %s", text)
-	}
-
-	targetPath := filepath.Join(workDir, "target.md")
-	if _, err := os.Stat(targetPath); err != nil {
-		t.Fatalf("expected target.md to exist")
-	}
-
-	os.RemoveAll("work")
-}
-
-func TestRepairTranslation_RejectsInvalidContent(t *testing.T) {
-	srv, tmpDir := setupTestServer(t)
-
-	sourcePath := filepath.Join(tmpDir, "src", "test.md")
-	sourceContent := `---
-title: 測試
-source_lang: zh-TW
-target_lang: en
-draft: true
----
-## Heading One
-
-## Heading Two
-`
-	os.WriteFile(sourcePath, []byte(sourceContent), 0644)
-
-	slug := "test-repair-fail"
-	workDir := filepath.Join("work", slug)
-	os.MkdirAll(workDir, 0755)
-
-	metaContent := `{"source_path":"` + sourcePath + `","target_language":"en","provider":"manual","structure_hash":"","fingerprint":{"heading_count":2,"h2_count":2,"h3_count":0,"h4_count":0,"ordered_list_count":0,"unordered_list_count":0,"table_count":0,"paragraph_count":0,"blockquote_count":0,"code_block_count":0}}`
-	os.WriteFile(filepath.Join(workDir, "meta.json"), []byte(metaContent), 0644)
-
-	repairContent := `---
-title: Test
-source_lang: zh-TW
-target_lang: en
-draft: true
----
-## Heading One
-`
-	req := mcp.CallToolRequest{}
-	req.Params.Arguments = map[string]any{
-		"slug":    slug,
-		"content": repairContent,
-	}
-
-	result, err := srv.handleRepairTranslation(context.Background(), req)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	text := result.Content[0].(mcp.TextContent).Text
-	if !strings.Contains(text, "REPAIR FAILED") {
-		t.Fatalf("expected REPAIR FAILED, got: %s", text)
-	}
-
-	os.RemoveAll("work")
-}
-
-func TestEndToEnd_PrepareReviewRepair(t *testing.T) {
+func TestEndToEnd_PrepareAndReview(t *testing.T) {
 	srv, tmpDir := setupTestServer(t)
 
 	sourcePath := filepath.Join(tmpDir, "src", "k8s-hpa-debug.md")
@@ -436,41 +335,78 @@ Found that metrics-server was not reporting CPU usage correctly.
 	if !strings.Contains(reviewText, `"passed": true`) {
 		t.Fatalf("expected good translation to pass review, got: %s", reviewText)
 	}
+	if !strings.Contains(reviewText, `"ready_to_sync": true`) {
+		t.Fatalf("expected good translation ready_to_sync=true, got: %s", reviewText)
+	}
+}
 
-	badTranslation := `---
-title: K8s HPA Fix
-source_lang: zh-TW
-target_lang: en
-draft: true
----
-## Problem Description
+func TestAllToolsRegistered(t *testing.T) {
+	srv, _ := setupTestServer(t)
 
-The HPA did not scale.
-
-## Solution
-
-Redeploy metrics-server.
-`
-	repairReq := mcp.CallToolRequest{}
-	repairReq.Params.Arguments = map[string]any{
-		"slug":    "e2e-test",
-		"content": badTranslation,
+	specs := allToolSpecs(srv)
+	for _, spec := range specs {
+		name := spec.def.Name
+		if name == "" {
+			t.Fatal("tool definition has empty name")
+		}
+		if spec.handler == nil {
+			t.Fatalf("tool %q has nil handler", name)
+		}
 	}
 
-	workDir := filepath.Join("work", "e2e-test")
-	os.MkdirAll(workDir, 0755)
-	metaContent := `{"source_path":"` + sourcePath + `","target_language":"en","provider":"manual","structure_hash":"","fingerprint":{"heading_count":4,"h2_count":4,"h3_count":0,"h4_count":0,"ordered_list_count":3,"unordered_list_count":3,"table_count":4,"paragraph_count":5,"blockquote_count":1,"code_block_count":1}}`
-	os.WriteFile(filepath.Join(workDir, "meta.json"), []byte(metaContent), 0644)
-
-	repairResult, err := srv.handleRepairTranslation(context.Background(), repairReq)
-	if err != nil {
-		t.Fatal(err)
+	expectedTools := []string{
+		"content_i18n_status",
+		"content_i18n_prepare_translation",
+		"content_i18n_review_translation",
+		"content_i18n_sync_status",
+		"content_i18n_translation_queue",
+		"content_i18n_translate_batch",
+		"content_i18n_validate_site",
 	}
 
-	repairText := repairResult.Content[0].(mcp.TextContent).Text
-	if !strings.Contains(repairText, "REPAIR FAILED") {
-		t.Fatalf("expected bad translation to fail repair, got: %s", repairText)
+	if len(specs) != len(expectedTools) {
+		t.Fatalf("expected %d tool specs, got %d", len(expectedTools), len(specs))
 	}
 
-	os.RemoveAll("work")
+	for _, expected := range expectedTools {
+		found := false
+		for _, spec := range specs {
+			if spec.def.Name == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected tool %q not found", expected)
+		}
+	}
+}
+
+func TestAllResourcesRegistered(t *testing.T) {
+	srv, _ := setupTestServer(t)
+
+	specs := allResourceSpecs(srv)
+	if len(specs) != 4 {
+		t.Fatalf("expected 4 resource specs, got %d", len(specs))
+	}
+
+	expected := []string{
+		"content-i18n://config",
+		"content-i18n://glossary",
+		"content-i18n://style-pack",
+	}
+	for _, uri := range expected {
+		found := false
+		for _, spec := range specs {
+			switch d := spec.def.(type) {
+			case mcp.Resource:
+				if d.URI == uri {
+					found = true
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("expected resource %q not found", uri)
+		}
+	}
 }

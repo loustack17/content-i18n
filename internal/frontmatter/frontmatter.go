@@ -2,6 +2,7 @@ package frontmatter
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -25,28 +26,32 @@ type Document struct {
 	RawMeta     map[string]any
 }
 
-func Split(markdown string) Document {
+func Split(markdown string) (Document, error) {
 	if !strings.HasPrefix(markdown, "---\n") {
-		return Document{Body: markdown}
+		return Document{Body: markdown}, nil
 	}
 
 	rest := strings.TrimPrefix(markdown, "---\n")
 	parts := strings.SplitN(rest, "\n---\n", 2)
 	if len(parts) != 2 {
-		return Document{Body: markdown}
+		return Document{Body: markdown}, nil
 	}
 
 	fm := parts[0]
 	var meta Metadata
-	_ = yaml.Unmarshal([]byte(fm), &meta)
+	if err := yaml.Unmarshal([]byte(fm), &meta); err != nil {
+		return Document{}, fmt.Errorf("parse frontmatter metadata: %w", err)
+	}
 	var raw map[string]any
-	_ = yaml.Unmarshal([]byte(fm), &raw)
+	if err := yaml.Unmarshal([]byte(fm), &raw); err != nil {
+		return Document{}, fmt.Errorf("parse frontmatter raw YAML: %w", err)
+	}
 	return Document{
 		Frontmatter: fm,
 		Body:        parts[1],
 		Metadata:    meta,
 		RawMeta:     raw,
-	}
+	}, nil
 }
 
 type ProviderMeta struct {
@@ -56,7 +61,7 @@ type ProviderMeta struct {
 	Draft    bool
 }
 
-func InjectProviderMeta(doc Document, pm ProviderMeta) string {
+func InjectProviderMeta(doc Document, pm ProviderMeta) (string, error) {
 	if doc.RawMeta == nil {
 		doc.RawMeta = make(map[string]any)
 	}
@@ -68,8 +73,13 @@ func InjectProviderMeta(doc Document, pm ProviderMeta) string {
 	var b bytes.Buffer
 	enc := yaml.NewEncoder(&b)
 	enc.SetIndent(2)
-	_ = enc.Encode(doc.RawMeta)
-	enc.Close()
+	if err := enc.Encode(doc.RawMeta); err != nil {
+		enc.Close()
+		return "", fmt.Errorf("encode frontmatter: %w", err)
+	}
+	if err := enc.Close(); err != nil {
+		return "", fmt.Errorf("close YAML encoder: %w", err)
+	}
 
-	return "---\n" + strings.TrimSpace(b.String()) + "\n---\n" + doc.Body
+	return "---\n" + strings.TrimSpace(b.String()) + "\n---\n" + doc.Body, nil
 }
