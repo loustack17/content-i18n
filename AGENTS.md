@@ -1,70 +1,84 @@
-# AGENTS.md — content-i18n
+# content-i18n
 
-`content-i18n` is a standalone AI-assisted i18n harness for Markdown/static-site content.
+## Boundary
 
-## Project Boundary
-
-This repo owns:
-
-- content discovery
-- translation work packets
+Owns:
+- config
+- discovery
+- work packets
+- glossary/style enforcement
 - validation
-- glossary/style rules
+- status/sync
+- queue
+- batch orchestration
 - CLI
-- MCP wrappers
-- provider fallback
+- MCP
+- provider adapters
 
-This repo does not own:
+Does not own:
+- consumer routing/theme/runtime widgets
+- consumer-specific article logic
+- final human publication review
 
-- Hugo routing
-- theme behaviour
-- runtime translation widgets
-- LouStackBase-specific URLs
+## Core rules
 
-Keep core logic generic. Hugo is an adapter/consumer, not the product boundary.
+- Fidelity-first: translate language only.
+- Preserve: heading order, section order, paragraph coverage, lists, tables, examples, references, code blocks, inline code, URLs, argument flow, style class.
+- Do not: summarize, compress, restructure, add facts/examples/commentary, change article genre.
+- Completion requires: validation pass + CJK clean + `sync-status` success.
+- Never fake completion with manual status edits.
+- `internal/core` = business-logic source of truth.
+- CLI/MCP = thin wrappers over core.
+- Hash-based staleness only. No mtime authority.
+- Preserve unknown frontmatter fields on write paths.
+- Do not silently swallow frontmatter parse/encode errors on official write paths.
 
-## Current Priority
+## Public MCP surface
 
-V1 order:
+Keep only:
+- `content_i18n_status`
+- `content_i18n_prepare_translation`
+- `content_i18n_review_translation`
+- `content_i18n_sync_status`
+- `content_i18n_translation_queue`
+- `content_i18n_translate_batch`
+- `content_i18n_validate_site`
 
-1. Core + CLI
-2. MCP wrappers after CLI commands work locally
-3. DeepL/Google provider fallback Post-V1
+## Workflow
 
-V1 commands:
+Single file:
+1. prepare
+2. translate
+3. review
+4. fix until `ready_to_sync=true`
+5. sync-status
 
-```bash
-content-i18n status
-content-i18n list
-content-i18n plan --file <source.md> --to en
-content-i18n apply-work --slug <slug> --dry-run
-content-i18n apply-work --slug <slug>
-content-i18n validate-content --file <target.md>
-content-i18n validate-site
-```
+Batch:
+- queue = `batch-status` / `next`
+- orchestration = `translate-batch`
+- per file: prepare → translate → review → validate → CJK check → sync-status
 
-Post-V1:
+Provider modes:
+- `deepl` / `google` = provider-backed
+- `ai-harness` = external AI writes target, repo handles prepare/review/sync/orchestration
+- `auto` = DeepL then Google fallback
 
-```bash
-content-i18n translate --file <source.md> --to en --provider deepl|google
-```
+## MCP design
 
-## Engineering Rules
+- Keep MCP split: server / defs / register / handlers / response helpers.
+- Prefer task-oriented tools, not overlapping low-level tools.
+- Queue/batch features should reduce agent freelancing.
 
-- Keep `internal/core` independent from CLI and MCP.
-- CLI and MCP must call the same core functions.
-- Prefer hash-based stale detection via `.content-i18n/status.json`; do not use mtime as authority.
-- Only validated write paths should update status metadata.
-- `apply-work --dry-run` must show intended changes before write.
-- Provider credentials must come from environment variables, never config files.
-- Runtime `work/` packets are generated local state and must not be committed.
-
-## Verification
-
-Run before reporting done:
+## Verify
 
 ```bash
 gofmt -w cmd internal
 go test ./...
-go run ./cmd/content-i18n status --config examples/generic-markdown/content-i18n.yaml
+go build ./cmd/content-i18n
+```
+
+MCP changes:
+
+```bash
+npx -y @modelcontextprotocol/inspector -- go run ./cmd/content-i18n mcp --config examples/generic-markdown/content-i18n.yaml
 ```
