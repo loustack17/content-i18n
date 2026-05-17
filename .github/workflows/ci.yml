@@ -7,15 +7,16 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  verify:
+    name: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version-file: go.mod
+          cache: true
       - run: gofmt -w cmd internal
-      - run: |
-          git diff --exit-code -- '*.go' || { echo "run gofmt -w cmd internal locally and commit"; exit 1; }
+      - run: git diff --exit-code -- '*.go'
       - run: go test ./...
       - run: go build ./cmd/content-i18n
