@@ -409,8 +409,8 @@ func checkStructure(source, target string) []Violation {
 			if srcNorm == tgtNorm {
 				continue
 			}
-			srcWords := strings.Fields(srcNorm)
-			tgtWords := strings.Fields(tgtNorm)
+			srcWords := meaningfulHeadingWords(srcNorm)
+			tgtWords := meaningfulHeadingWords(tgtNorm)
 			common := 0
 			for _, sw := range srcWords {
 				for _, tw := range tgtWords {
@@ -478,4 +478,43 @@ func checkStructure(source, target string) []Violation {
 	violations = append(violations, structure.CheckOmission(srcBody, tgtBody)...)
 
 	return violations
+}
+
+func meaningfulHeadingWords(heading string) []string {
+	stripped := stripInlineCode(heading)
+	tokens := strings.Fields(stripped)
+	out := make([]string, 0, len(tokens))
+	for _, t := range tokens {
+		if isPunctuationOnly(t) {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+func stripInlineCode(heading string) string {
+	result := heading
+	for {
+		start := strings.Index(result, "`")
+		if start < 0 {
+			break
+		}
+		end := strings.Index(result[start+1:], "`")
+		if end < 0 {
+			break
+		}
+		end = start + 1 + end
+		result = result[:start] + " " + result[end+1:]
+	}
+	return result
+}
+
+func isPunctuationOnly(token string) bool {
+	for _, r := range token {
+		if !unicode.IsPunct(r) && !unicode.IsSymbol(r) {
+			return false
+		}
+	}
+	return true
 }

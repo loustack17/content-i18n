@@ -537,3 +537,64 @@ func TestTone_NoViolationsWhenClean(t *testing.T) {
 		}
 	}
 }
+
+func TestHeadingComparison_EmDashOnlyDoesNotFail(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\n## 效能分析 — 最佳實踐\n\ncontent\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\n## Performance Analysis — Best Practices\n\ncontent\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, vv := range v {
+		if vv.Field == "structure" && strings.Contains(vv.Message, "heading order mismatch") {
+			t.Fatalf("unexpected heading order mismatch for em-dash headings: %v", vv)
+		}
+	}
+}
+
+func TestHeadingComparison_InlineCodeInHeadingDoesNotFail(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\n## 如何執行 `kubectl set image`\n\ncontent\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\n## How to Run `kubectl set image`\n\ncontent\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, vv := range v {
+		if vv.Field == "structure" && strings.Contains(vv.Message, "heading order mismatch") {
+			t.Fatalf("unexpected heading order mismatch for inline-code headings: %v", vv)
+		}
+	}
+}
+
+func TestHeadingComparison_RealHeadingOrderMismatchStillFails(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\n## Setup and Configuration\n\n## Testing and Debugging\n\n## Deployment and Monitoring\n\ncontent\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\n## Setup and Configuration\n\n## Deployment and Monitoring\n\n## Testing and Debugging\n\ncontent\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "structure" && strings.Contains(vv.Message, "heading order mismatch") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected heading order mismatch for reordered headings, got %v", v)
+	}
+}
+
+func TestHeadingComparison_TranslatedHeadingsNoRegression(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\n## 安裝指南\n\n## 設定步驟\n\ncontent\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\n## Installation Guide\n\n## Configuration Steps\n\ncontent\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, vv := range v {
+		if vv.Field == "structure" && strings.Contains(vv.Message, "heading order") {
+			t.Fatalf("unexpected heading order mismatch for translated headings: %v", vv)
+		}
+	}
+}
