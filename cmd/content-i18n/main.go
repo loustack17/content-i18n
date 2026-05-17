@@ -56,6 +56,8 @@ func main() {
 		runSyncStatus(args)
 	case "translate-batch":
 		runTranslateBatch(args)
+	case "init":
+		runInit(args)
 	case "help":
 		printUsage()
 	default:
@@ -70,7 +72,7 @@ var knownCommands = map[string]bool{
 	"validate-content": true, "validate-site": true, "mcp": true,
 	"prepare": true, "review": true, "repair-plan": true,
 	"next": true, "batch-status": true, "sync-status": true,
-	"translate-batch": true, "help": true,
+	"translate-batch": true, "init": true, "help": true,
 }
 
 func parseCommand(args []string) (string, []string) {
@@ -90,7 +92,7 @@ func parseCommand(args []string) (string, []string) {
 }
 
 func printUsage() {
-	fmt.Println("usage: content-i18n [--config path] <status|list|plan|apply-work|validate-content|validate-site|prepare|review|repair-plan|next|batch-status|sync-status|translate-batch|mcp>")
+	fmt.Println("usage: content-i18n [--config path] <status|list|plan|apply-work|validate-content|validate-site|prepare|review|repair-plan|next|batch-status|sync-status|translate-batch|init|mcp>")
 }
 
 func loadConfig(configPath string) (*config.Config, error) {
@@ -499,5 +501,27 @@ func runTranslateBatch(args []string) {
 
 	if len(report.Failed) > 0 {
 		os.Exit(1)
+	}
+}
+
+func runInit(args []string) {
+	flags := flag.NewFlagSet("init", flag.ExitOnError)
+	typ := flags.String("type", "generic-markdown", "project type: hugo or generic-markdown")
+	output := flags.String("output", "content-i18n.yaml", "output config file path")
+	force := flags.Bool("force", false, "overwrite existing files")
+	flags.Parse(args)
+
+	result, err := core.Init(core.InitOptions{
+		Type:   *typ,
+		Output: *output,
+		Force:  *force,
+	})
+	exitOnError(err)
+
+	for _, f := range result.Created {
+		fmt.Printf("created: %s\n", f)
+	}
+	for _, f := range result.Skipped {
+		fmt.Printf("skipped (exists): %s\n", f)
 	}
 }

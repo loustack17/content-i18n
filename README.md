@@ -1,53 +1,160 @@
 # content-i18n
 
-Standalone fidelity-first translation harness for Markdown and static-site content.
+`content-i18n` is a standalone translation tool for language conversion across content formats and publishing systems.
 
-`content-i18n` translates language only. It preserves structure, content coverage, argument flow, examples, references, code blocks, inline code, URLs, and style class from the source post.
+It is built for fidelity-first translation. The target should be the same document in another language, not a cleaned-up rewrite.
 
-## What this repo is
+## What this tool guarantees
 
-This repo is the translation engine, not the consumer content repo.
+`content-i18n` changes language only.
 
-It owns:
-- config loading and content discovery
-- work packet generation
-- glossary and style-pack enforcement
-- fidelity validation
-- direct-target completion sync
-- batch queue control
-- batch orchestration
-- MCP server and CLI
-- provider adapters (DeepL / Google)
+It preserves:
+- heading order and section order
+- paragraph coverage
+- lists, tables, examples, and references
+- code blocks, technical inline code, URLs, commands, identifiers, and error strings
+- the article's overall reasoning and tone
 
-It does not own:
-- Hugo routing or theme behavior
-- consumer-specific article content
-- runtime language-switch plugins
-- editorial rewriting
-- final human publication review
+A translation is complete only when:
+1. review or validation passes
+2. no leftover source-language prose remains where the target should be translated
+3. `sync-status` succeeds
 
-## Product shape
+## What this tool will not do
 
-`content-i18n` supports three operating layers:
+It does not:
+- own consumer routing or theme behavior
+- replace final human editorial review
+- rewrite the article into a different structure or genre
+- change code blocks, technical literals, URLs, or references
 
-1. **Core** — reusable business logic in `internal/core`
-2. **CLI** — operator-facing commands in `cmd/content-i18n`
-3. **MCP** — agent-facing tool surface in `internal/mcp`
+## Repo shape
 
-The MCP surface is intentionally narrow and task-oriented.
+The repo has three layers:
+- `internal/core`: source of truth for business logic
+- `cmd/content-i18n`: CLI for operators
+- `internal/mcp`: MCP surface for AI agents
 
-## Public MCP tool surface
+CLI and MCP stay thin. Core owns the workflow rules.
 
-`content-i18n` exposes 7 MCP tools:
+## Before you start
+
+You need:
+- Go installed
+- a `content-i18n.yaml` config file for your consumer repo
+- source and target content roots defined in that config
+
+Example configs live under:
+- `examples/hugo/content-i18n.yaml`
+- `examples/generic-markdown/content-i18n.yaml`
+
+Run commands from the `content-i18n` repo root.
+
+## Quick start
+
+Scaffold a starter config in your consumer repo:
+
+```bash
+go build -o content-i18n ./cmd/content-i18n
+./content-i18n init --type hugo --output ./content-i18n.yaml
+```
+
+That creates:
+- `content-i18n.yaml`
+- `.content-i18n/glossary.yaml`
+- `.content-i18n/style/technical-english.yaml`
+
+Then run a basic status check:
+
+```bash
+./content-i18n status --config ./content-i18n.yaml
+```
+
+You can also skip the build step:
+
+```bash
+go run ./cmd/content-i18n init --type hugo --output ./content-i18n.yaml
+go run ./cmd/content-i18n status --config ./content-i18n.yaml
+```
+
+## Main CLI commands
+
+```bash
+content-i18n init --type hugo --output ./content-i18n.yaml
+content-i18n status --config content-i18n.yaml
+content-i18n prepare --config content-i18n.yaml --file <source.md> --to <lang>
+content-i18n review --config content-i18n.yaml --file <target.md> --source <source.md>
+content-i18n sync-status --config content-i18n.yaml --file <target.md> --source <source.md>
+content-i18n batch-status --config content-i18n.yaml [--group DevOps]
+content-i18n next --config content-i18n.yaml [--group DevOps]
+content-i18n translate-batch --config content-i18n.yaml --provider deepl [--group DevOps]
+content-i18n validate-site --config content-i18n.yaml
+content-i18n mcp --config content-i18n.yaml
+```
+
+## Main workflows
+
+### Single file
+
+MCP-first:
+1. `content_i18n_prepare_translation`
+2. translate the target file at the returned `target_path`
+3. `content_i18n_review_translation`
+4. fix until `ready_to_sync=true`
+5. `content_i18n_sync_status`
+
+CLI-first example using language-root content paths:
+
+```bash
+content-i18n prepare --file content/zh-TW/posts/example.md --to en
+content-i18n review --file content/en/posts/example.md --source content/zh-TW/posts/example.md
+content-i18n sync-status --file content/en/posts/example.md --source content/zh-TW/posts/example.md
+```
+
+### Queue-driven rollout
+
+```bash
+content-i18n batch-status --group DevOps
+content-i18n next --group DevOps
+```
+
+Use this when you want deterministic file-by-file progression.
+
+### Batch orchestration
+
+```bash
+content-i18n translate-batch --provider deepl --group DevOps
+content-i18n translate-batch --provider google --group DevOps --stop-on-fail
+content-i18n translate-batch --provider ai-harness --group DevOps --continue-on-error
+```
+
+Per file, the batch flow is:
+- prepare
+- translate or load the externally written target
+- review
+- validate
+- CJK check
+- sync-status
+
+## Provider behavior
+
+- `deepl`: provider-backed translation, then review and sync
+- `google`: provider-backed translation, then review and sync
+- `auto`: tries DeepL first, then Google
+- `ai-harness`: does not generate the translation itself; an external AI writes the target, and `content-i18n` handles prepare, review, queue control, and sync
+
+## MCP tools and resources
+
+Public MCP tools:
 - `content_i18n_status`
 - `content_i18n_prepare_translation`
 - `content_i18n_review_translation`
 - `content_i18n_sync_status`
 - `content_i18n_translation_queue`
 - `content_i18n_translate_batch`
-- `content_i18n_validate_site`
+- `content_i18n_validate_site` (consumer-site validation; current built-in adapter is Hugo-oriented)
 
-These tools are meant to cover the full agent workflow without exposing noisy low-level internals.
+Read-only MCP resources are also available for config and content inspection.
 
 ## Repo layout
 
@@ -67,107 +174,71 @@ examples/                  runnable example configs
 schemas/                   JSON schema for config
 ```
 
-## Quick start
+## Consumer example
 
-```bash
-go build ./cmd/content-i18n
-./content-i18n status --config content-i18n.yaml
+A multilingual content repo can use language roots like:
+
+```text
+content/
+  en/
+    posts/
+  zh-TW/
+    posts/
 ```
 
-## CLI commands
+`content-i18n` works on the content files and config. It does not own consumer routing or theme behavior.
 
-```bash
-content-i18n status --config content-i18n.yaml
-content-i18n list --config content-i18n.yaml
-content-i18n plan --config content-i18n.yaml --file <source.md> --to <lang>
-content-i18n prepare --config content-i18n.yaml --file <source.md> --to <lang>
-content-i18n review --config content-i18n.yaml --file <target.md> --source <source.md>
-content-i18n repair-plan --config content-i18n.yaml --file <target.md> --source <source.md>
-content-i18n next --config content-i18n.yaml [--group DevOps]
-content-i18n batch-status --config content-i18n.yaml [--group DevOps]
-content-i18n sync-status --config content-i18n.yaml --file <target.md> --source <source.md>
-content-i18n translate-batch --config content-i18n.yaml --provider deepl [--group DevOps] [--limit 10] [--stop-on-fail] [--continue-on-error] [--dry-run]
-content-i18n apply-work --config content-i18n.yaml --slug <slug> [--dry-run] [--force]
-content-i18n validate-content --config content-i18n.yaml --file <target.md> [--source <source.md>]
-content-i18n validate-site --config content-i18n.yaml
-content-i18n mcp --config content-i18n.yaml
+## Markdown example
+
+Source:
+
+```markdown
+## 問題起點
+
+先確認 Cloud Run runtime contract 是否真的符合預期。
 ```
 
-## Main workflows
+Target:
 
-### 1. Single-file AI workflow
+```markdown
+## Starting Point
 
-MCP-first flow:
-1. `content_i18n_prepare_translation`
-2. agent translates
-3. `content_i18n_review_translation`
-4. fix until `ready_to_sync=true`
-5. `content_i18n_sync_status`
-
-CLI-first flow:
-```bash
-content-i18n prepare --file content/posts/source.md --to en
-content-i18n review --file work/slug/target.md --source content/posts/source.md
-content-i18n sync-status --file content/en/posts/example.md --source content/zh-TW/posts/example.md
+First confirm whether the Cloud Run runtime contract really matches the expected behavior.
 ```
 
-### 2. Queue-driven rollout
+The structure stays the same. Only the language changes.
 
-```bash
-content-i18n batch-status --group DevOps
-content-i18n next --group DevOps
-```
+## Validation guarantees
 
-Use when you want deterministic file-by-file progression.
+`content-i18n` checks:
+- structure and section order
+- code block and technical inline literal preservation
+- URL preservation
+- glossary and tone rules from config
+- stale vs completed state through source hashes
 
-### 3. One-command batch orchestration
+Typical review failures include:
+- changed heading order
+- modified code blocks
+- altered technical inline literals
+- changed URLs
 
-```bash
-content-i18n translate-batch --provider deepl --group DevOps
-content-i18n translate-batch --provider google --group DevOps --stop-on-fail
-content-i18n translate-batch --provider ai-harness --group DevOps --continue-on-error
-```
+It does not replace final human publication review.
 
-Pipeline per file:
-- prepare
-- translate (provider API or pre-filled target)
-- review
-- repair if configured
-- validate
-- CJK check
-- sync-status
+## Common failures
 
-A file is never counted complete unless validation passes, CJK is clean, and sync-status succeeds.
-
-## Provider modes
-
-- **deepl/google**: provider-backed translation, then review/validate/sync
-- **ai-harness**: batch review/sync for pre-filled targets; does not call an LLM itself
-- **auto**: tries DeepL first, falls back to Google
-
-## Fidelity-first contract
-
-`content-i18n` is a translation harness, not an editorial rewriting tool.
-
-| Preserved | Translated |
-|-----------|------------|
-| Heading hierarchy and order | Prose within each element |
-| Paragraph count per section | Link text (without changing meaning) |
-| List count and nesting | Frontmatter title/description/keywords |
-| Table dimensions | Glossary terms applied when applicable |
-| Code blocks (byte-for-byte) | |
-| Inline code | |
-| URLs | |
-| Examples and references | |
-| Argument flow | |
-| Style class | |
+- missing or wrong `--config` path
+- source and target files do not match the configured language roots
+- review fails because structure drifted from the source
+- `sync-status` fails because review has not passed yet
 
 ## Docs
 
 - [docs/architecture.md](docs/architecture.md)
 - [docs/agent-workflow.md](docs/agent-workflow.md)
+- [docs/content-i18n.md](docs/content-i18n.md)
 
-## Verification
+## Verify
 
 ```bash
 gofmt -w cmd internal
