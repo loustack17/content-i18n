@@ -58,6 +58,14 @@ examples/                  runnable example configs
 schemas/                   JSON schema for config
 ```
 
+## Built-in consumer starters
+
+The `init` command currently scaffolds two starter types:
+- `hugo`
+- `generic-markdown`
+
+These are starter templates, not the full boundary of the core engine.
+
 ## Core design rules
 
 ### Fidelity first

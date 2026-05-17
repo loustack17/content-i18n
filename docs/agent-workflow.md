@@ -14,6 +14,20 @@ That authority covers:
 
 It does not replace final human editorial sign-off.
 
+## First-run setup
+
+Before an agent can use a consumer repo cleanly, someone should run `init` in that consumer repo:
+
+```bash
+content-i18n init --type hugo --output ./content-i18n.yaml
+```
+
+Current built-in starter types:
+- `hugo`
+- `generic-markdown`
+
+This creates the starter config, glossary, and style files that the later workflow depends on.
+
 ## Tiny prompts
 
 Single file:

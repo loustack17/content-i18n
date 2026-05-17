@@ -41,22 +41,31 @@ CLI and MCP stay thin. Core owns the workflow rules.
 
 You need:
 - Go installed
-- a `content-i18n.yaml` config file for your consumer repo
-- source and target content roots defined in that config
+- the `content-i18n` binary available on your machine
+- a consumer repo where you want to manage translations
+
+Current built-in starter types:
+- `hugo`
+- `generic-markdown`
 
 Example configs live under:
 - `examples/hugo/content-i18n.yaml`
 - `examples/generic-markdown/content-i18n.yaml`
 
-Run commands from the `content-i18n` repo root.
-
 ## Quick start
 
-Scaffold a starter config in your consumer repo:
+First build or install the tool once:
 
 ```bash
-go build -o content-i18n ./cmd/content-i18n
-./content-i18n init --type hugo --output ./content-i18n.yaml
+cd /path/to/content-i18n
+go build -o /tmp/content-i18n ./cmd/content-i18n
+```
+
+Then move to the consumer repo and scaffold the starter files there:
+
+```bash
+cd /path/to/consumer-repo
+/tmp/content-i18n init --type hugo --output ./content-i18n.yaml
 ```
 
 That creates:
@@ -64,23 +73,25 @@ That creates:
 - `.content-i18n/glossary.yaml`
 - `.content-i18n/style/technical-english.yaml`
 
-Then run a basic status check:
+Then run a basic status check from the consumer repo:
 
 ```bash
-./content-i18n status --config ./content-i18n.yaml
+/tmp/content-i18n status --config ./content-i18n.yaml
 ```
 
-You can also skip the build step:
+If you install the binary into your PATH, the same flow becomes:
 
 ```bash
-go run ./cmd/content-i18n init --type hugo --output ./content-i18n.yaml
-go run ./cmd/content-i18n status --config ./content-i18n.yaml
+cd /path/to/consumer-repo
+content-i18n init --type hugo --output ./content-i18n.yaml
+content-i18n status --config ./content-i18n.yaml
 ```
 
 ## Main CLI commands
 
 ```bash
 content-i18n init --type hugo --output ./content-i18n.yaml
+content-i18n init --type generic-markdown --output ./content-i18n.yaml
 content-i18n status --config content-i18n.yaml
 content-i18n prepare --config content-i18n.yaml --file <source.md> --to <lang>
 content-i18n review --config content-i18n.yaml --file <target.md> --source <source.md>
@@ -135,6 +146,14 @@ Per file, the batch flow is:
 - validate
 - CJK check
 - sync-status
+
+## Supported starter types
+
+`init` currently supports:
+- `hugo`
+- `generic-markdown`
+
+The core translation engine is broader than these two starters, but these are the only built-in scaffold types today.
 
 ## Provider behavior
 

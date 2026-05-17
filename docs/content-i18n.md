@@ -19,7 +19,7 @@ LouStackBase owns:
 
 ## First-time setup
 
-In a consumer repo, start by scaffolding the config and support files:
+Build or install `content-i18n` first. Then, from the consumer repo root, scaffold the config and support files:
 
 ```bash
 content-i18n init --type hugo --output ./content-i18n.yaml
@@ -29,6 +29,10 @@ That creates:
 - `content-i18n.yaml`
 - `.content-i18n/glossary.yaml`
 - `.content-i18n/style/technical-english.yaml`
+
+Current built-in starter types:
+- `hugo`
+- `generic-markdown`
 
 Edit the generated paths and style settings if the consumer repo needs different roots or wording rules.
 
