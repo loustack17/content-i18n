@@ -1,154 +1,126 @@
 # Agent workflow
 
-content-i18n is designed so an AI agent can translate content with a short instruction. The tool itself provides all harness context, review criteria, and repair guidance.
+`content-i18n` is built so an AI agent can use a short instruction and rely on the tool for context, validation, queue control, and completion rules.
 
-## Tiny prompt
+## Repo role in the workflow
 
-### MCP-first
+`content-i18n` is the translation engine.
+
+The consumer repo provides:
+- source content
+- target roots
+- glossary
+- style pack
+- project config
+
+The agent should treat `content-i18n` as the workflow authority.
+
+## Tiny prompt model
+
+A compliant agent should be able to work from a short instruction like:
 
 > Use content-i18n to translate `<source>` fidelity-first and keep fixing until review passes.
 
+For batch mode:
+
+> Use content-i18n to translate the queued DevOps batch fidelity-first and keep going until the queue is drained or a real blocker appears.
+
+## Public MCP workflow
+
+The public MCP surface is intentionally narrow:
+- `content_i18n_status`
+- `content_i18n_prepare_translation`
+- `content_i18n_review_translation`
+- `content_i18n_sync_status`
+- `content_i18n_translation_queue`
+- `content_i18n_translate_batch`
+- `content_i18n_validate_site`
+
+## Single-file workflow
+
+### MCP-first
+
+| Step | Tool | Purpose |
+|------|------|---------|
+| 1 | `content_i18n_prepare_translation` | Get source, prompt, glossary, style, context, fingerprint, target path |
+| 2 | agent translates | Produce fidelity-first target content |
+| 3 | `content_i18n_review_translation` | Check whether translation is structurally/content correct |
+| 4 | repeat step 2–3 | Fix until review is good |
+| 5 | `content_i18n_sync_status` | Mark translation complete officially |
+
 ### CLI-first
 
-> Use `content-i18n prepare`, translate the output, then `content-i18n review` and fix until it passes.
-
-That's it. No large custom operator prompt. The tool carries everything the agent needs.
-
-## Expected tool call sequence
-
-### MCP
-
-| Step | Tool | Purpose |
-|------|------|---------|
-| 1 | `content_i18n_prepare_translation` | Get source, prompt, glossary, style, context, fingerprint, target_path |
-| 2 | (agent translates) | Use returned context to produce fidelity-first translation |
-| 3 | `content_i18n_review_translation` | Validate against source structure and content |
-| 4 | Repeat 3 until review passes | Iterative repair loop |
-| 5 | `content_i18n_sync_status` | Mark direct-target translation complete (optional) |
-
-For batch workflows:
-| Step | Tool | Purpose |
-|------|------|---------|
-| 1 | `content_i18n_translation_queue` | See queue status and next candidate |
-| 2 | `content_i18n_translate_batch` | Full orchestration: prepare → translate → review → validate → sync |
-
-### CLI
-
-| Step | Command | Purpose |
-|------|---------|---------|
-| 1 | `content-i18n prepare --file <source> --to <lang>` | Get source + context + fingerprint |
-| 2 | (agent translates) | Write target.md |
-| 3 | `content-i18n review --file <target> --source <source>` | Validate translation |
-| 4 | `content-i18n repair-plan --file <target> --source <source>` | Pre-write validation |
-| 5 | Repeat 3-4 until review passes | Iterative repair loop |
-| 6 | `content-i18n apply-work --slug <slug>` | Deploy to target path |
-
-## Required success criteria
-
-Review passes when:
-
-- Heading hierarchy and order match source
-- Paragraph count per section matches source
-- List count and nesting match source
-- Table dimensions match source
-- Code blocks preserved byte-for-byte
-- Inline code preserved
-- URLs preserved
-- Blockquotes preserved
-- Word ratio is reasonable (not <50% of source)
-- No tone/style violations
+```bash
+content-i18n prepare --file content/posts/source.md --to en
+content-i18n review --file work/slug/target.md --source content/posts/source.md
+content-i18n sync-status --file content/en/posts/example.md --source content/zh-TW/posts/example.md
+```
 
 ## What prepare returns
 
-A single `content_i18n_prepare_translation` call returns:
+`content_i18n_prepare_translation` returns:
+- `source`
+- `prompt`
+- `glossary`
+- `style`
+- `context`
+- `fingerprint`
+- `slug`
+- `target_path`
 
-- `source` — full source markdown
-- `prompt` — translation prompt from config
-- `glossary` — glossary terms (if configured)
-- `style` — style pack rules (if configured)
-- `context` — structure fingerprint, heading order, preserved URLs, 7-point self-check
-- `fingerprint` — H2/H3/H4 counts, list counts, table rows, paragraphs, blockquotes, code blocks
-- `slug` — work packet identifier
-- `target_path` — where to write the translation
+This should be enough to translate without unrelated repo exploration.
 
 ## What review returns
 
-A single `content_i18n_review_translation` call returns:
+`content_i18n_review_translation` returns:
+- `passed`
+- `ready_to_sync`
+- `source_words`
+- `target_words`
+- `word_ratio`
+- `issues[]`
 
-- `passed` — boolean
-- `ready_to_sync` — true when passed=true AND no error-severity issues (structure/code/URL intact). When true, call `content_i18n_sync_status` to mark complete.
-- `source_words` / `target_words` / `word_ratio` — coverage check
-- `issues[]` — array of:
-  - `severity` — "error" (structure/code/URL) or "warning" (tone/style)
-  - `field` — which check failed
-  - `section` — where in the document
-  - `message` — what went wrong
-  - `suggested_fix` — how to fix it
+`ready_to_sync=true` means:
+- structural/content validation passed
+- no error-severity issues remain
+- the file is ready for official completion sync
 
-## Fidelity-first, not editorial rewriting
+Then call:
+- `content_i18n_sync_status`
 
-content-i18n enforces that the translated output is the same article in another language. The agent must not:
+## Queue-driven workflow
 
-- Summarize or compress sections
-- Merge or split paragraphs
-- Reorder sections
-- Add facts, examples, or commentary not in the source
-- Remove caveats, troubleshooting steps, or lessons learned
-- Change the genre (debugging walkthrough → tutorial, etc.)
+Use queue mode when you want deterministic next-file progression without picking files manually.
 
-## Self-sufficient work packets
+Tool:
+- `content_i18n_translation_queue`
 
-Once `prepare` is called, the work packet directory contains:
+Returns:
+- total
+- completed
+- stale
+- missing
+- next candidate
 
-- `source.md` — source content
-- `prompt.md` — translation prompt
-- `glossary.md` — glossary (if configured)
-- `style.md` — style pack (if configured)
-- `context.md` — structure fingerprint + self-check checklist
-- `meta.json` — metadata with structure hash and fingerprint
-- `target.md` — translation output (agent writes here)
+CLI equivalents:
+```bash
+content-i18n batch-status --group DevOps
+content-i18n next --group DevOps
+```
 
-The agent needs no external context beyond the work packet to complete the translation.
+## Batch orchestration workflow
 
-## Batch translation orchestration
+Use batch orchestration when you want one command/tool call to process many queued files.
 
-For translating many files without manual per-file looping, use `translate-batch` (CLI) or `content_i18n_translate_batch` (MCP).
+### CLI
 
-### When to use batch vs manual flow
+```bash
+content-i18n translate-batch --provider deepl --group DevOps
+content-i18n translate-batch --provider google --group DevOps --stop-on-fail
+content-i18n translate-batch --provider ai-harness --group DevOps --continue-on-error
+```
 
-| Scenario | Approach |
-|----------|----------|
-| Single file or small edits | Manual prepare → review → repair → apply |
-| Many files, DeepL/Google provider | `translate-batch --provider deepl` (fully autonomous) |
-| Many files, AI agent workflow | `translate-batch --provider ai-harness` (processes pre-filled targets) |
-| Need control over error handling | `--stop-on-fail` or `--continue-on-error` |
-| Want to preview before running | `--dry-run` |
-
-### Batch pipeline
-
-For each queued file:
-
-1. **Prepare** — generate work packet with source, prompt, glossary, style, context, fingerprint
-2. **Translate** — call provider API (DeepL/Google) or check for pre-filled target (ai-harness)
-3. **Review** — validate against source using `TranslateReview` (config-driven glossary/tone/style checks)
-4. **Repair** — if review fails and `--continue-on-error`, attempt repair
-5. **Validate** — CJK character check on target body
-6. **Sync-status** — update official status store only if all checks pass
-
-### Provider modes
-
-- **`deepl` / `google`**: Calls provider API to translate body text, writes target with full frontmatter preserved (all source fields + provider metadata), reviews, validates, syncs.
-- **`ai-harness`**: Prepares work packets, then reviews/validates/syncs pre-filled `target.md` files. Does not call AI — the agent must write targets externally first. Reports unfilled targets as "pending".
-- **`auto`**: Tries DeepL first, falls back to Google.
-
-### Success guarantees
-
-Batch never marks a file complete unless:
-- `validate-content --source` passes (structure, code, URLs, glossary, tone)
-- CJK character check is clean (no source-language characters in target)
-- `sync-status` succeeds (path validation, status store update)
-
-### MCP batch tool
+### MCP
 
 ```json
 {
@@ -163,12 +135,47 @@ Batch never marks a file complete unless:
 }
 ```
 
-Returns:
-```json
-{
-  "total": 15,
-  "completed": [{"source_path": "...", "target_path": "...", "language": "en", "status": "completed"}],
-  "failed": [{"source_path": "...", "language": "en", "status": "failed", "error": "..."}],
-  "remaining": [{"source_path": "...", "language": "en", "status": "remaining"}]
-}
-```
+### Batch behavior
+
+Per file, orchestration does:
+- prepare
+- translate (provider API or pre-filled target)
+- review
+- repair if configured
+- validate
+- CJK check
+- sync-status
+
+A file is never counted complete unless:
+- validation passes
+- CJK is clean
+- sync-status succeeds
+
+## Provider modes
+
+- **deepl / google**: provider-backed translation path
+- **ai-harness**: external AI writes target first; content-i18n handles prepare/review/sync/orchestration
+- **auto**: DeepL first, then Google fallback
+
+## Fidelity rules for agents
+
+The agent must not:
+- summarize
+- compress
+- restructure
+- merge or split sections casually
+- add new facts or examples
+- remove caution/troubleshooting detail
+- change the article into a different genre
+
+The target should be the same article in another language.
+
+## When to use which workflow
+
+| Scenario | Best path |
+|----------|-----------|
+| One post, manual review | prepare → review → sync |
+| One post, AI-assisted | MCP prepare/review/sync |
+| Many posts, deterministic manual progression | translation_queue |
+| Many posts, provider-backed orchestration | translate-batch |
+| Final site-level check | validate_site |
