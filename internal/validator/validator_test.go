@@ -598,3 +598,64 @@ func TestHeadingComparison_TranslatedHeadingsNoRegression(t *testing.T) {
 		}
 	}
 }
+
+func TestInlineCode_TechnicalCodeStillFailsIfChanged(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\nrun `kubectl get pods` to check\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\nrun `kubectl list pods` to check\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, vv := range v {
+		if vv.Field == "inlineCode" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected inline code violation for changed technical code, got %v", v)
+	}
+}
+
+func TestInlineCode_ChineseProseInBackticksCanBeTranslated(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\nThis is `一段中文解釋文字` in the text\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\nThis is `a Chinese explanation` in the text\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, vv := range v {
+		if vv.Field == "inlineCode" {
+			t.Fatalf("unexpected inline code violation for translated prose backticks: %v", vv)
+		}
+	}
+}
+
+func TestInlineCode_CJKCleanTargetWithTranslatedProseBackticksPasses(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: 原始\ndraft: true\n---\n使用 `kubectl set image` 來設定。注意 `這個概念很重要`。\n")
+	target := writeTemp(t, "target.md", "---\ntitle: Original\ndraft: true\nsource_lang: zh-TW\ntarget_lang: en\n---\nUse `kubectl set image` to configure. Note `this concept is important`.\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, vv := range v {
+		if vv.Field == "inlineCode" {
+			t.Fatalf("unexpected inline code violation: %v", vv)
+		}
+	}
+}
+
+func TestInlineCode_TrueInlineCodePreservationNoRegression(t *testing.T) {
+	source := writeTemp(t, "source.md", "---\ntitle: src\ndraft: true\n---\nuse `foo` and `bar`\n")
+	target := writeTemp(t, "target.md", "---\ntitle: tgt\ndraft: true\n---\nuse `foo` and `bar`\n")
+	v, err := Validate(target, source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, vv := range v {
+		if vv.Field == "inlineCode" {
+			t.Fatalf("unexpected inline code violation for matching technical code: %v", vv)
+		}
+	}
+}

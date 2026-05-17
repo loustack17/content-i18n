@@ -128,14 +128,18 @@ func Validate(targetPath string, sourcePath string, opts *ValidateOptions) ([]Vi
 
 	sourceInline := frontmatter.ExtractInlineCode(sourceContent)
 	targetInline := frontmatter.ExtractInlineCode(targetContent)
-	if len(targetInline) < len(sourceInline) {
-		violations = append(violations, Violation{Field: "inlineCode", Section: "body", Message: fmt.Sprintf("target has %d inline code, source has %d", len(targetInline), len(sourceInline)), SuggestedFix: "preserve all inline code from source"})
+
+	srcTech := filterTechnicalInline(sourceInline)
+	tgtTech := filterTechnicalInline(targetInline)
+
+	if len(tgtTech) < len(srcTech) {
+		violations = append(violations, Violation{Field: "inlineCode", Section: "body", Message: fmt.Sprintf("target has %d technical inline code, source has %d", len(tgtTech), len(srcTech)), SuggestedFix: "preserve all technical inline code from source"})
 	}
 
-	if len(sourceInline) == len(targetInline) {
-		for i := range sourceInline {
-			if strings.TrimSpace(sourceInline[i]) != strings.TrimSpace(targetInline[i]) {
-				violations = append(violations, Violation{Field: "inlineCode", Section: "body", Message: fmt.Sprintf("inline code %q changed to %q", sourceInline[i], targetInline[i]), SuggestedFix: "restore original inline code"})
+	if len(srcTech) == len(tgtTech) {
+		for i := range srcTech {
+			if strings.TrimSpace(srcTech[i]) != strings.TrimSpace(tgtTech[i]) {
+				violations = append(violations, Violation{Field: "inlineCode", Section: "body", Message: fmt.Sprintf("inline code %q changed to %q", srcTech[i], tgtTech[i]), SuggestedFix: "restore original inline code"})
 				break
 			}
 		}
@@ -517,4 +521,48 @@ func isPunctuationOnly(token string) bool {
 		}
 	}
 	return true
+}
+
+func filterTechnicalInline(spans []string) []string {
+	out := make([]string, 0, len(spans))
+	for _, s := range spans {
+		if isTechnicalInline(s) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+var technicalInlineRe = regexp.MustCompile(`^[\w./\-]+$|^--?[\w\-]+$|[\[\](){}]`)
+
+func isTechnicalInline(span string) bool {
+	span = strings.TrimSpace(span)
+	if span == "" {
+		return false
+	}
+	for _, r := range span {
+		if isCJK(r) {
+			return false
+		}
+	}
+	if technicalInlineRe.MatchString(span) {
+		return true
+	}
+	hasLetter := false
+	hasDigit := false
+	for _, r := range span {
+		if unicode.IsLetter(r) {
+			hasLetter = true
+		}
+		if unicode.IsDigit(r) {
+			hasDigit = true
+		}
+	}
+	if hasLetter {
+		return true
+	}
+	if hasDigit {
+		return true
+	}
+	return false
 }
